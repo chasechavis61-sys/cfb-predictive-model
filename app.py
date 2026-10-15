@@ -10,7 +10,7 @@ st.title("🏈 Automated College Football Predictive Model")
 # ==============================================================================
 # 1. API INITIALIZATION
 # ==============================================================================
-RAW_API_KEY = "PASTE_YOUR_KEY_HERE"
+RAW_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
 clean_key = RAW_API_KEY.replace("Bearer ", "").strip()
 configuration = cfbd.Configuration(access_token=clean_key)
