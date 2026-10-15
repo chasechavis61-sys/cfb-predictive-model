@@ -10,31 +10,20 @@ YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. LIVE DATA PIPELINE (Using the Correct Full URL)
+# 1. LIVE DATA PIPELINE (Direct Mainstream Core Loader)
 # ==============================================================================
 @st.cache_data(ttl=1800)
 def load_cfb_data_safe():
-    # The exact full URL path to the live data stream
     url_2026 = "https://githubusercontent.com"
     
     try:
-        # Try to pull the live remote data file automatically
+        # Pull live data across the web interface instantly
         df_all = pd.read_csv(url_2026, low_memory=False)
         df_curr_raw = df_all[df_all['season'] == YEAR].copy()
         df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
     except Exception as e:
-        st.warning("⚠️ External data connection failed. Loading local baseline model instead...")
-        # FIXED SYNTAX: Fallback dictionary completely filled out correctly
-        mock_data = {
-            'season': [2026, 2026, 2026, 2026], 
-            'week': [7, 7, 7, 7],
-            'home_team': ['Ohio State', 'Alabama', 'Georgia', 'Michigan'],
-            'away_team': ['Michigan', 'Tennessee', 'Texas', 'Penn State'],
-            'home_score': [35.0, 28.0, np.nan, np.nan], 
-            'away_score': [14.0, 24.0, np.nan, np.nan]
-        }
-        df_curr_raw = pd.DataFrame(mock_data)
-        df_prior_raw = pd.DataFrame(mock_data).dropna()
+        st.error(f"❌ Network file mapping timed out: {e}")
+        st.stop()
 
     # Process 2026 live schedule mapping
     games_curr = []
@@ -53,7 +42,7 @@ def load_cfb_data_safe():
         })
     df_2026_mapped = pd.DataFrame(games_curr)
 
-    # Identify active week
+    # Identify active calendar timeline week
     df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
     current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
 
@@ -111,10 +100,12 @@ if st.button("Generate Custom Spread"):
     a_rating = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
     margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
     
-    if margin > 0:
-        st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin, 1)}")
+    # Extraction Fix applied to custom widget values
+    val = margin[0]
+    if val > 0:
+        st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(val, 1)}")
     else:
-        st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin), 1)}")
+        st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(val), 1)}")
 
 # ==============================================================================
 # 3. AUTOMATED CURRENT WEEK SCHEDULE VIEW
@@ -130,8 +121,8 @@ else:
         h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
         a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
         
-        h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
-        a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
+        h_rating = h_rating_arr[0] if len(h_rating_arr) > 0 else 0
+        a_rating = a_rating_arr[0] if len(a_rating_arr) > 0 else 0
         
         margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
         winner = row.home_team if margin > 0 else row.away_team
