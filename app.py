@@ -8,18 +8,15 @@ st.set_page_config(page_title="CFB Automated Spread Model", layout="wide")
 st.title("🏈 Automated College Football Predictive Model")
 
 # ==============================================================================
-# 1. API INITIALIZATION (The 401 Fix)
+# 1. API INITIALIZATION
 # ==============================================================================
-# Paste your raw alphanumeric key string between the quotes below.
-# Do NOT include the word "Bearer " inside these quotes.
 RAW_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
-# Clean out any accidental whitespace
 clean_key = RAW_API_KEY.replace("Bearer ", "").strip()
-
-# THE EXACT SDK FIX: Pass your key directly as the access_token parameter
 configuration = cfbd.Configuration(access_token=clean_key)
+
 api_instance = cfbd.GamesApi(cfbd.ApiClient(configuration))
+betting_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
 
 YEAR = 2025
 HOME_FIELD_ADVANTAGE = 2.5
@@ -33,8 +30,12 @@ def load_and_model_data():
     games_curr = []
     for g in all_games_curr:
         games_curr.append({
-            'week': g.week, 'home_team': g.home_team, 'away_team': g.away_team,
-            'home_points': g.home_points, 'away_points': g.away_points,
+            'id': g.id,
+            'week': g.week,
+            'home_team': g.home_team,
+            'away_team': g.away_team,
+            'home_points': g.home_points,
+            'away_points': g.away_points,
             'margin': g.home_points - g.away_points if g.home_points is not None else None,
             'completed': g.home_points is not None
         })
@@ -96,27 +97,19 @@ if st.button("Generate Custom Spread"):
         st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin[0]), 1)}")
 
 # ==============================================================================
-# 4. FULL WEEK SCHEDULE VIEW
+# 4. FULL WEEK SCHEDULE VIEW WITH LIVE ODDS COMPARISON
 # ==============================================================================
 st.header(f"📅 Schedule & Spreads for Week {current_week}")
-
-# THE CORRECT FIX: Use BettingApi instead of LinesApi
-betting_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
-
 current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
 
 if current_games.empty:
     st.info("No unplayed regular season games left for this week.")
 else:
-    # Fetch all Vegas lines for the current week in one call
     try:
-        vegas_data = betting_api.get_lines(year=YEAR, week=current_week, season_type='regular')
-
-        # Parse out the Vegas line text safely if it exists
+        vegas_data = betting_api.get_lines(year=YEAR, week=int(current_week), season_type='regular')
         vegas_dict = {}
         for g in vegas_data:
             if g.lines and len(g.lines) > 0:
-                # Grabs the first provider's line text (usually consensus line)
                 vegas_dict[g.id] = g.lines[0].formatted_line
             else:
                 vegas_dict[g.id] = "N/A"
@@ -128,14 +121,13 @@ else:
         h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
         a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
 
-        h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
-        a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
+        h_rating = h_rating_arr[0] if len(h_rating_arr) > 0 else 0
+        a_rating = a_rating_arr[0] if len(a_rating_arr) > 0 else 0
 
         margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
         winner = row.home_team if margin > 0 else row.away_team
         spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
 
-        # Grab Vegas line if available, otherwise mark as N/A
         vegas_line = vegas_dict.get(row.id, "N/A")
 
         predictions.append({
