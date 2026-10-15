@@ -106,36 +106,36 @@ lines_api = cfbd.LinesApi(cfbd.ApiClient(configuration))
 current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
 
 if current_games.empty:
-st.info("No unplayed regular season games left for this week.")
+    st.info("No unplayed regular season games left for this week.")
 else:
-# Fetch all Vegas lines for the current week in one call
-try:
-vegas_data = lines_api.get_lines(year=YEAR, week=current_week, season_type='regular')
-vegas_dict = {g.id: g.lines[0].text for g in vegas_data if g.lines}
-except Exception:
-vegas_dict = {}
+    # Fetch all Vegas lines for the current week in one call
+    try:
+        vegas_data = lines_api.get_lines(year=YEAR, week=current_week, season_type='regular')
+        vegas_dict = {g.id: g.lines[0].text for g in vegas_data if g.lines}
+    except Exception:
+        vegas_dict = {}
 
-predictions = []
-for row in current_games.itertuples():
-h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
-a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
+    predictions = []
+    for row in current_games.itertuples():
+        h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
+        a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
 
-h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
-a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
+        h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
+        a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
 
-margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
-winner = row.home_team if margin > 0 else row.away_team
-spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
+        margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
+        winner = row.home_team if margin > 0 else row.away_team
+        spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
 
-# Grab Vegas line if available, otherwise mark as N/A
-vegas_line = vegas_dict.get(row.id, "N/A")
+        # Grab Vegas line if available, otherwise mark as N/A
+        vegas_line = vegas_dict.get(row.id, "N/A")
 
-predictions.append({
-"Away Team": row.away_team,
-"Home Team": row.home_team,
-"Projected Winner": winner,
-"Your Model Line": spread,
-"Vegas Consensus Line": vegas_line
-})
+        predictions.append({
+            "Away Team": row.away_team,
+            "Home Team": row.home_team,
+            "Projected Winner": winner,
+            "Your Model Line": spread,
+            "Vegas Consensus Line": vegas_line
+        })
 
-st.dataframe(pd.DataFrame(predictions), use_container_width=True)
+    st.dataframe(pd.DataFrame(predictions), use_container_width=True)
