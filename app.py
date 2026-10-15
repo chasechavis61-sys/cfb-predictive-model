@@ -24,7 +24,7 @@ def load_mirror_data():
     except Exception as e:
         st.error("Could not stream live schedules. The data mirror might be down.")
         st.stop()
-        
+
     # Map current 2026 games
     games_curr = []
     for row in df_curr.itertuples():
@@ -39,47 +39,47 @@ def load_mirror_data():
             'week': int(row.week), 'home_team': str(row.home_team), 'away_team': str(row.away_team),
             'margin': margin, 'completed': completed
         })
-df_2026_mapped = pd.DataFrame(games_curr)
+    df_2026_mapped = pd.DataFrame(games_curr)
 
-# Automatically identify the active week we are playing right now
-df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
-current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
+    # Automatically identify the active week we are playing right now
+    df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
+    current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
 
-# Map 2025 history to anchor power ratings
-games_prior = []
-for row in df_prior.itertuples():
-    home_pts = getattr(row, 'home_points', None) if pd.notna(getattr(row, 'home_points', None)) else getattr(row, 'home_score', None)
-    away_pts = getattr(row, 'away_points', None) if pd.notna(getattr(row, 'away_points', None)) else getattr(row, 'away_score', None)
-    if pd.notna(home_pts) and pd.notna(away_pts):
-        games_prior.append({'home_team': str(row.home_team), 'away_team': str(row.away_team), 'margin': int(home_pts) - int(away_pts)})
-df_prior_mapped = pd.DataFrame(games_prior)
+    # Map 2025 history to anchor power ratings
+    games_prior = []
+    for row in df_prior.itertuples():
+        home_pts = getattr(row, 'home_points', None) if pd.notna(getattr(row, 'home_points', None)) else getattr(row, 'home_score', None)
+        away_pts = getattr(row, 'away_points', None) if pd.notna(getattr(row, 'away_points', None)) else getattr(row, 'away_score', None)
+        if pd.notna(home_pts) and pd.notna(away_pts):
+            games_prior.append({'home_team': str(row.home_team), 'away_team': str(row.away_team), 'margin': int(home_pts) - int(away_pts)})
+    df_prior_mapped = pd.DataFrame(games_prior)
 
-# Combine past datasets (weighting current season games higher)
-df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
-df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
+    # Combine past datasets (weighting current season games higher)
+    df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
+    df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
 
-# Fit Ridge Regression mathematical models
-all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_2026_mapped['home_team'].unique())))
-t_to_idx = {team: i for i, team in enumerate(all_t)}
+    # Fit Ridge Regression mathematical models
+    all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_2026_mapped['home_team'].unique())))
+    t_to_idx = {team: i for i, team in enumerate(all_t)}
 
-X = np.zeros((len(df_past), len(all_t)))
-Y = np.zeros(len(df_past))
+    X = np.zeros((len(df_past), len(all_t)))
+    Y = np.zeros(len(df_past))
 
-for idx, row in enumerate(df_past.itertuples()):
-    X[idx, t_to_idx[row.home_team]] = 1
-    X[idx, t_to_idx[row.away_team]] = -1
-    Y[idx] = row.margin - HOME_FIELD_ADVANTAGE
-    
+    for idx, row in enumerate(df_past.itertuples()):
+        X[idx, t_to_idx[row.home_team]] = 1
+        X[idx, t_to_idx[row.away_team]] = -1
+        Y[idx] = row.margin - HOME_FIELD_ADVANTAGE
+
     model = Ridge(alpha=1.5, fit_intercept=False)
     model.fit(X, Y)
-    
+
     power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
     power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
     
-return df_2026_mapped, current_wk, power_ratings
-    
-    with st.spinner("Streaming live mirror stats and rendering analytics model..."):
-        df_2026, current_week, power_ratings = load_mirror_data()
+    return df_2026_mapped, current_wk, power_ratings
+
+with st.spinner("Streaming live mirror stats and rendering analytics model..."):
+    df_2026, current_week, power_ratings = load_mirror_data()
 
 # ==============================================================================
 # 2. INTERACTIVE MATCHUP UI
@@ -95,11 +95,11 @@ if st.button("Generate Custom Spread"):
     h_rating = power_ratings.loc[power_ratings['Team'] == home_select, 'Rating'].values
     a_rating = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
     margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
-
-if margin > 0:
-    st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin[0], 1)}")
-else:
-    st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin[0]), 1)}")
+    
+    if margin > 0:
+        st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin[0], 1)}")
+    else:
+        st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin[0]), 1)}")
 
 # ==============================================================================
 # 3. AUTOMATED CURRENT WEEK SCHEDULE VIEW
@@ -123,10 +123,10 @@ else:
         spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
         
         predictions.append({
-            "Away Team": row.away_team,
-            "Home Team": row.home_team,
-            "Projected Winner": winner,
+            "Away Team": row.away_team, 
+            "Home Team": row.home_team, 
+            "Projected Winner": winner, 
             "Model Spread Line": spread
         })
-
-st.dataframe(pd.DataFrame(predictions), use_container_width=True)
+        
+    st.dataframe(pd.DataFrame(predictions), use_container_width=True)
