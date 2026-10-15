@@ -100,8 +100,8 @@ if st.button("Generate Custom Spread"):
 # ==============================================================================
 st.header(f"📅 Schedule & Spreads for Week {current_week}")
 
-# Initialize the lines API client
-lines_api = cfbd.LinesApi(cfbd.ApiClient(configuration))
+# THE CORRECT FIX: Use BettingApi instead of LinesApi
+betting_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
 
 current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
 
@@ -110,8 +110,16 @@ if current_games.empty:
 else:
     # Fetch all Vegas lines for the current week in one call
     try:
-        vegas_data = lines_api.get_lines(year=YEAR, week=current_week, season_type='regular')
-        vegas_dict = {g.id: g.lines[0].text for g in vegas_data if g.lines}
+        vegas_data = betting_api.get_lines(year=YEAR, week=current_week, season_type='regular')
+
+        # Parse out the Vegas line text safely if it exists
+        vegas_dict = {}
+        for g in vegas_data:
+            if g.lines and len(g.lines) > 0:
+                # Grabs the first provider's line text (usually consensus line)
+                vegas_dict[g.id] = g.lines[0].formatted_line
+            else:
+                vegas_dict[g.id] = "N/A"
     except Exception:
         vegas_dict = {}
 
