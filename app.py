@@ -1,66 +1,59 @@
 import streamlit as st
+import cfbd
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import Ridge
 
 st.set_page_config(page_title="CFB Automated Spread Model", layout="wide")
-st.title("🏈 Keyless Automated College Football Predictive Model")
+st.title("🏈 Automated College Football Predictive Model")
+
+# ==============================================================================
+# 1. API INITIALIZATION (The 401 Fix)
+# ==============================================================================
+# Paste your raw alphanumeric key string between the quotes below.
+# Do NOT include the word "Bearer " inside these quotes.
+RAW_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
+
+# Clean out any accidental whitespace
+clean_key = RAW_API_KEY.replace("Bearer ", "").strip()
+
+# THE EXACT SDK FIX: Pass your key directly as the access_token parameter
+configuration = cfbd.Configuration(access_token=clean_key)
+api_instance = cfbd.GamesApi(cfbd.ApiClient(configuration))
 
 YEAR = 2025
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. API-FREE DATA PIPELINE (Public GitHub Mirror)
+# 2. AUTOMATIC DATA PIPELINE
 # ==============================================================================
 @st.cache_data(ttl=3600)
-def load_mirror_data():
-    # Load 2025 games directly from the public cfbfastR parquet/csv mirror
-    url_2025 = f"https://githubusercontent.com_{YEAR}.parquet"
-    url_2024 = f"https://githubusercontent.com_{YEAR-1}.parquet"
-
-    try:
-        df_curr = pd.read_parquet(url_2025)
-        df_prior = pd.read_parquet(url_2024)
-    except Exception:
-        # Fallback to CSV variants if parquet mirror shifts structures
-        url_2025_csv = f"https://githubusercontent.com_{YEAR}.csv"
-        url_2024_csv = f"https://githubusercontent.com_{YEAR-1}.csv"
-        df_curr = pd.read_csv(url_2025_csv)
-        df_prior = pd.read_csv(url_2024_csv)
-
-    # Standardize data framing
+def load_and_model_data():
+    all_games_curr = api_instance.get_games(year=YEAR, season_type='regular')
     games_curr = []
-    for row in df_curr.itertuples():
-        # Handle varying mirror column naming strategies
-        home_pts = getattr(row, 'home_points', None) if pd.notna(getattr(row, 'home_points', None)) else getattr(row, 'home_score', None)
-        away_pts = getattr(row, 'away_points', None) if pd.notna(getattr(row, 'away_points', None)) else getattr(row, 'away_score', None)
-
-        completed = pd.notna(home_pts) and pd.notna(away_pts)
-        margin = (home_pts - away_pts) if completed else None
-
+    for g in all_games_curr:
         games_curr.append({
-            'week': row.week, 'home_team': row.home_team, 'away_team': row.away_team,
-            'margin': margin, 'completed': completed
+            'week': g.week, 'home_team': g.home_team, 'away_team': g.away_team,
+            'home_points': g.home_points, 'away_points': g.away_points,
+            'margin': g.home_points - g.away_points if g.home_points is not None else None,
+            'completed': g.home_points is not None
         })
-    df_2026_mapped = pd.DataFrame(games_curr)
+    df_curr = pd.DataFrame(games_curr)
 
-    # Detect current target slate week
-    df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
-    current_wk = df_uncompleted['week'].min() if not df_uncompleted.empty else df_2026_mapped['week'].max()
+    df_uncompleted = df_curr[df_curr['completed'] == False]
+    current_wk = df_uncompleted['week'].min() if not df_uncompleted.empty else df_curr['week'].max()
 
+    fallback_games = api_instance.get_games(year=YEAR-1, season_type='regular')
     games_prior = []
-    for row in df_prior.itertuples():
-        home_pts = getattr(row, 'home_points', None) if pd.notna(getattr(row, 'home_points', None)) else getattr(row, 'home_score', None)
-        away_pts = getattr(row, 'away_points', None) if pd.notna(getattr(row, 'away_score', None)) else getattr(row, 'away_score', None)
-        if pd.notna(home_pts) and pd.notna(away_pts):
-            games_prior.append({'home_team': row.home_team, 'away_team': row.away_team, 'margin': home_pts - away_pts})
-    df_prior_mapped = pd.DataFrame(games_prior)
+    for g in fallback_games:
+        if g.home_points is not None:
+            games_prior.append({'home_team': g.home_team, 'away_team': g.away_team, 'margin': g.home_points - g.away_points})
+    df_prior = pd.DataFrame(games_prior)
 
-    df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
-    df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
+    df_curr_past = df_curr[df_curr['completed'] == True].copy()
+    df_past = pd.concat([df_prior, df_curr_past, df_curr_past], ignore_index=True)
 
-    # Core Mathematical Linear Regression Model setup
-    all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_2026_mapped['home_team'].unique())))
+    all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_curr['home_team'].unique())))
     t_to_idx = {team: i for i, team in enumerate(all_t)}
 
     X = np.zeros((len(df_past), len(all_t)))
@@ -77,13 +70,13 @@ def load_mirror_data():
     power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
     power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
 
-    return df_2026_mapped, current_wk, power_ratings
+    return df_curr, current_wk, power_ratings
 
-with st.spinner("Streaming live mirror stats and rendering analytics model..."):
-    df_2026, current_week, power_ratings = load_mirror_data()
+with st.spinner("Analyzing matchup histories and training model..."):
+    df_curr, current_week, power_ratings = load_and_model_data()
 
 # ==============================================================================
-# 2. INTERACTIVE MATCHUP UI
+# 3. INTERACTIVE MATCHUP UI
 # ==============================================================================
 st.header("🔮 Custom Matchup Predictor")
 col1, col2 = st.columns(2)
@@ -103,25 +96,25 @@ if st.button("Generate Custom Spread"):
         st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin[0]), 1)}")
 
 # ==============================================================================
-# 3. AUTOMATED SCHEDULE VIEW
+# 4. FULL WEEK SCHEDULE VIEW
 # ==============================================================================
 st.header(f"📅 Schedule & Spreads for Week {current_week}")
-current_games = df_2026[(df_2026['completed'] == False) & (df_2026['week'] == current_week)]
+current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
 
 if current_games.empty:
-    st.info("No unplayed regular season games left for this active slate window.")
+    st.info("No unplayed regular season games left for this week.")
 else:
     predictions = []
     for row in current_games.itertuples():
         h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
         a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
 
-        h_rating = h_rating_arr[0] if len(h_rating_arr) > 0 else 0
-        a_rating = a_rating_arr[0] if len(a_rating_arr) > 0 else 0
+        h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
+        a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
 
         margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
         winner = row.home_team if margin > 0 else row.away_team
-        spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
+        spread = f"{row.home_team} -{round(margin[0], 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin[0]), 1)}"
 
         predictions.append({"Away Team": row.away_team, "Home Team": row.home_team, "Projected Winner": winner, "Model Spread Line": spread})
 
