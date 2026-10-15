@@ -84,18 +84,23 @@ col1, col2 = st.columns(2)
 with col1:
     away_select = st.selectbox("Select Away Team", options=power_ratings['Team'].unique(), index=0)
 with col2:
-    home_select = st.selectbox("Select Home Team", options=power_ratings['Team'].unique(), index=1)
+    home_select = st.selectbox ("Select Home Team", options=power_ratings['Team'].unique(), index=1)
 
 if st.button("Generate Custom Spread"):
-    h_rating = power_ratings.loc[power_ratings['Team'] == home_select, 'Rating'].values
-    a_rating = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
-    margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
+    # Fix: Locate team safely regardless of text case variations
+    h_rating_arr = power_ratings.loc[power_ratings['Team'].str.lower() == home_select.lower(), 'Rating'].values
+    a_rating_arr = power_ratings.loc[power_ratings['Team'].str.lower() == away_select.lower(), 'Rating'].values
+    
+    # Safe float extraction guard rails
+    h_rating = float(h_rating_arr[0]) if len(h_rating_arr) > 0 else 0.0
+    away_rating = float(a_rating_arr[0]) if len(a_rating_arr) > 0 else 0.0
+    
+    margin = (h_rating - away_rating) + HOME_FIELD_ADVANTAGE
     
     if margin > 0:
         st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin, 1)}")
     else:
         st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin), 1)}")
-
 # ==============================================================================
 # 4. FULL WEEK SCHEDULE VIEW WITH LIVE ODDS COMPARISON
 # ==============================================================================
