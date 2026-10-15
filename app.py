@@ -14,15 +14,15 @@ HOME_FIELD_ADVANTAGE = 2.5
 # ==============================================================================
 @st.cache_data(ttl=1800) # Refreshes schedules automatically every 30 minutes
 def load_parquet_mirror():
-    # Stream live schedules directly from SportsDataverse official release distributions
-    url_2026 = f"https://github.com"
-    url_2025 = f"https://github.com"
+    # THE FIX: Full paths to the verified data mirrors
+    url_2026 = "https://github.com"
+    url_2025 = "https://github.com"
     
     try:
         df_curr = pd.read_parquet(url_2026)
         df_prior = pd.read_parquet(url_2025)
-    except Exception:
-        st.error("❌ Streamlit is currently unable to read the data format. Make sure 'pyarrow' is listed in your requirements.txt file.")
+    except Exception as e:
+        st.error(f"❌ Error loading data: {e}. Make sure 'pyarrow' is listed in your requiremnets.txt file.")
         st.stop()
 
     # Process 2026 live schedule mapping
