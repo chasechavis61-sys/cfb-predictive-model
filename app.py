@@ -145,6 +145,4 @@ else:
         })
         
     st.dataframe(pd.DataFrame(predictions), use_container_width=True)
-        })
-        
-    st.dataframe(pd.DataFrame(predictions), use_container_width=True)
+      
