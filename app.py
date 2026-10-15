@@ -1,83 +1,88 @@
 import streamlit as st
-import cfbd
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import Ridge
 
-st.set_page_config(page_title="CFB Automated Spread Model", layout="wide")
-st.title("🏈 Automated College Football Predictive Model")
-
-# ==============================================================================
-# 1. API INITIALIZATION
-# ==============================================================================
-RAW_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
-
-clean_key = RAW_API_KEY.replace("Bearer ", "").strip()
-configuration = cfbd.Configuration(access_token=clean_key)
-
-api_instance = cfbd.GamesApi(cfbd.ApiClient(configuration))
-betting_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
+st.set_page_config(page_title="CFB Live Automated Spread Model", layout="wide")
+st.title("🏈 Keyless Automated College Football Predictive Model")
 
 YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 2. AUTOMATIC DATA PIPELINE
+# 1. LIVE DATA PIPELINE (Bypassing API Key Restrictions)
 # ==============================================================================
-@st.cache_data(ttl=3600)
-def load_and_model_data():
-    all_games_curr = api_instance.get_games(year=YEAR, season_type='regular')
+@st.cache_data(ttl=1800) # Refreshes live data every 30 minutes
+def load_mirror_data():
+    # Stream live 2026 and historical 2025 data directly from open data storage
+    url_2026 = f"https://githubusercontent.com"
+    url_2025 = f"https://githubusercontent.com"
+    
+    try:
+        df_curr = pd.read_csv(url_2026)
+        df_prior = pd.read_csv(url_2025)
+    except Exception as e:
+        st.error("Could not stream live schedules. The data mirror might be down.")
+        st.stop()
+        
+    # Map current 2026 games
     games_curr = []
-    for g in all_games_curr:
+    for row in df_curr.itertuples():
+        # Handle variations in open-source mirror column names safely
+        home_pts = getattr(row, 'home_points', None) if pd.notna(getattr(row, 'home_points', None)) else getattr(row, 'home_score', None)
+        away_pts = getattr(row, 'away_points', None) if pd.notna(getattr(row, 'away_points', None)) else getattr(row, 'away_score', None)
+        
+        completed = pd.notna(home_pts) and pd.notna(away_pts)
+        margin = (int(home_pts) - int(away_pts)) if completed else None
+        
         games_curr.append({
-            'id': g.id,
-            'week': g.week,
-            'home_team': g.home_team,
-            'away_team': g.away_team,
-            'home_points': g.home_points,
-            'away_points': g.away_points,
-            'margin': g.home_points - g.away_points if g.home_points is not None else None,
-            'completed': g.home_points is not None
+            'week': int(row.week), 'home_team': str(row.home_team), 'away_team': str(row.away_team),
+            'margin': margin, 'completed': completed
         })
-    df_curr = pd.DataFrame(games_curr)
+df_2026_mapped = pd.DataFrame(games_curr)
 
-    df_uncompleted = df_curr[df_curr['completed'] == False]
-    current_wk = df_uncompleted['week'].min() if not df_uncompleted.empty else df_curr['week'].max()
+# Automatically identify the active week we are playing right now
+df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
+current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
 
-    fallback_games = api_instance.get_games(year=YEAR-1, season_type='regular')
-    games_prior = []
-    for g in fallback_games:
-        if g.home_points is not None:
-            games_prior.append({'home_team': g.home_team, 'away_team': g.away_team, 'margin': g.home_points - g.away_points})
-    df_prior = pd.DataFrame(games_prior)
+# Map 2025 history to anchor power ratings
+games_prior = []
+for row in df_prior.itertuples():
+    home_pts = getattr(row, 'home_points', None) if pd.notna(getattr(row, 'home_points', None)) else getattr(row, 'home_score', None)
+    away_pts = getattr(row, 'away_points', None) if pd.notna(getattr(row, 'away_points', None)) else getattr(row, 'away_score', None)
+    if pd.notna(home_pts) and pd.notna(away_pts):
+        games_prior.append({'home_team': str(row.home_team), 'away_team': str(row.away_team), 'margin': int(home_pts) - int(away_pts)})
+df_prior_mapped = pd.DataFrame(games_prior)
 
-    df_curr_past = df_curr[df_curr['completed'] == True].copy()
-    df_past = pd.concat([df_prior, df_curr_past, df_curr_past], ignore_index=True)
+# Combine past datasets (weighting current season games higher)
+df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
+df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
 
-    all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_curr['home_team'].unique())))
-    t_to_idx = {team: i for i, team in enumerate(all_t)}
+# Fit Ridge Regression mathematical models
+all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_2026_mapped['home_team'].unique())))
+t_to_idx = {team: i for i, team in enumerate(all_t)}
 
-    X = np.zeros((len(df_past), len(all_t)))
-    Y = np.zeros(len(df_past))
+X = np.zeros((len(df_past), len(all_t)))
+Y = np.zeros(len(df_past))
 
-    for idx, row in enumerate(df_past.itertuples()):
-        X[idx, t_to_idx[row.home_team]] = 1
-        X[idx, t_to_idx[row.away_team]] = -1
-        Y[idx] = row.margin - HOME_FIELD_ADVANTAGE
+for idx, row in enumerate(df_past.itertuples()):
+    X[idx, t_to_idx[row.home_team]] = 1
+    X[idx, t_to_idx[row.away_team]] = -1
+    Y[idx] = row.margin - HOME_FIELD_ADVANTAGE
 
-    model = Ridge(alpha=1.5, fit_intercept=False)
-    model.fit(X, Y)
+model = Ridge(alpha=1.5, fit_intercept=False)
+model.fit(X, Y)
 
-    power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
-    power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
+power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
+power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
 
-    return df_curr, current_wk, power_ratings
+return df_2026_mapped, current_wk, power_ratings
 
-with st.spinner("Analyzing matchup histories and training model..."):
-    df_curr, current_week, power_ratings = load_and_model_data()
+with st.spinner("Streaming live mirror stats and rendering analytics model..."):
+df_2026, current_week, power_ratings = load_mirror_data()
 
 # ==============================================================================
-# 3. INTERACTIVE MATCHUP UI
+# 2. INTERACTIVE MATCHUP UI
 # ==============================================================================
 st.header("🔮 Custom Matchup Predictor")
 col1, col2 = st.columns(2)
@@ -91,51 +96,37 @@ if st.button("Generate Custom Spread"):
     a_rating = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
     margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
 
-    if margin > 0:
-        st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin[0], 1)}")
-    else:
-        st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin[0]), 1)}")
+if margin > 0:
+    st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin[0], 1)}")
+else:
+    st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin[0]), 1)}")
 
 # ==============================================================================
-# 4. FULL WEEK SCHEDULE VIEW WITH LIVE ODDS COMPARISON
+# 3. AUTOMATED CURRENT WEEK SCHEDULE VIEW
 # ==============================================================================
-st.header(f"📅 Schedule & Spreads for Week {current_week}")
-current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
+st.header(f"📅 Schedule & Predicted Spreads for Week {current_week}")
+current_games = df_2026[(df_2026['completed'] == False) & (df_2026['week'] == current_week)]
 
 if current_games.empty:
-    st.info("No unplayed regular season games left for this week.")
+    st.info("No unplayed regular season games left for this week's active window.")
 else:
-    try:
-        vegas_data = betting_api.get_lines(year=YEAR, week=int(current_week), season_type='regular')
-        vegas_dict = {}
-        for g in vegas_data:
-            if g.lines and len(g.lines) > 0:
-                vegas_dict[g.id] = g.lines[0].formatted_line
-            else:
-                vegas_dict[g.id] = "N/A"
-    except Exception:
-        vegas_dict = {}
-
     predictions = []
     for row in current_games.itertuples():
         h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
         a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
-
+        
         h_rating = h_rating_arr[0] if len(h_rating_arr) > 0 else 0
         a_rating = a_rating_arr[0] if len(a_rating_arr) > 0 else 0
-
+        
         margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
         winner = row.home_team if margin > 0 else row.away_team
         spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
-
-        vegas_line = vegas_dict.get(row.id, "N/A")
-
+        
         predictions.append({
             "Away Team": row.away_team,
             "Home Team": row.home_team,
             "Projected Winner": winner,
-            "Your Model Line": spread,
-            "Vegas Consensus Line": vegas_line
+            "Model Spread Line": spread
         })
 
-    st.dataframe(pd.DataFrame(predictions), use_container_width=True)
+st.dataframe(pd.DataFrame(predictions), use_container_width=True)
