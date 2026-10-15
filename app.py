@@ -18,7 +18,7 @@ configuration = cfbd.Configuration(access_token=clean_key)
 api_instance = cfbd.GamesApi(cfbd.ApiClient(configuration))
 betting_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
 
-YEAR = 2025
+YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
