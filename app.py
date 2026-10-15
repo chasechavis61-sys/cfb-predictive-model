@@ -10,45 +10,31 @@ YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. LIVE DATA PIPELINE (With CDN Mirror Fallback)
+# 1. LIVE DATA PIPELINE (Direct Mainstream Core Loader via CDN Mirror)
 # ==============================================================================
 @st.cache_data(ttl=1800)
 def load_cfb_data_safe():
-    # Primary URL
+    # Primary URL and verified global CDN routing to bypass network blocks
     url_primary = "https://githubusercontent.com"
-    # THE FIX: CDN Mirror to bypass GitHub hostname blocks
     url_mirror = "https://jsdelivr.net"
     
     df_all = None
     
-    # Try primary connection first
+    # Check connections cleanly
     try:
         df_all = pd.read_csv(url_primary, low_memory=False)
     except Exception:
-        # Try CDN mirror connection if primary fails
         try:
             df_all = pd.read_csv(url_mirror, low_memory=False)
-        except Exception:
-            pass
+        except Exception as e:
+            st.error(f"❌ Network file mapping timed out: {e}")
+            st.stop()
 
-    if df_all is not None:
-        df_curr_raw = df_all[df_all['season'] == YEAR].copy()
-        df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
-    else:
-        st.warning("⚠️ Streamlit network is offline. Displaying local data engine instead...")
-        # Clean local fallback dictionary with proper numeric values
-        mock_data = {
-            'season':, 
-            'week':,
-            'home_team': ['Ohio State', 'Alabama', 'Georgia', 'Michigan'],
-            'away_team': ['Michigan', 'Tennessee', 'Texas', 'Penn State'],
-            'home_score': [35.0, 28.0, np.nan, np.nan], 
-            'away_score': [14.0, 24.0, np.nan, np.nan]
-        }
-        df_curr_raw = pd.DataFrame(mock_data)
-        df_prior_raw = pd.DataFrame(mock_data).dropna()
+    df_curr_raw = df_all[df_all['season'] == YEAR].copy()
+    df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
 
     # Process 2026 live schedule mapping
+
     games_curr = []
     for row in df_curr_raw.itertuples():
         home_pts = getattr(row, 'home_score', None)
@@ -122,7 +108,6 @@ if st.button("Generate Custom Spread"):
     h_rating_arr = power_ratings.loc[power_ratings['Team'] == home_select, 'Rating'].values
     a_rating_arr = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
     
-    # FIXED: Extracting elements safely from numpy array output
     h_rating = float(h_rating_arr[0]) if len(h_rating_arr) > 0 else 0.0
     away_rating = float(a_rating_arr[0]) if len(a_rating_arr) > 0 else 0.0
     
@@ -147,7 +132,6 @@ else:
         h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
         a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
         
-        # FIXED: Extraction from array applied to weekly scheduler view loops
         h_rating = float(h_rating_arr[0]) if len(h_rating_arr) > 0 else 0.0
         a_rating = float(a_rating_arr[0]) if len(a_rating_arr) > 0 else 0.0
         
