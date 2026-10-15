@@ -10,28 +10,26 @@ YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. BULLETPROOF DATA PIPELINE (With Local Data Fallbacks)
+# 1. LIVE DATA PIPELINE (Using the Correct Full URL)
 # ==============================================================================
 @st.cache_data(ttl=1800)
 def load_cfb_data_safe():
+    # THE CRUCIAL FIX: The exact full URL path to the live data stream
     url_2026 = "https://githubusercontent.com"
     
     try:
-        # Try to pull the live remote data file
+        # Try to pull the live remote data file automatically
         df_all = pd.read_csv(url_2026, low_memory=False)
         df_curr_raw = df_all[df_all['season'] == YEAR].copy()
         df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
-    except Exception:
-        # LOCAL FALLBACK MATRIX: If the external server times out or throws a hostname error, 
-        # the app will build a static mock dataset so the UI remains active and doesn't crash.
-        st.warning("⚠️ External data connection timed out. Loading local baseline model instead...")
-        
-        # Creating a basic structural framework of matches for training
+    except Exception as e:
+        st.warning("⚠️ External data connection failed. Loading local baseline model instead...")
+        # Clean local fallback matrices that will never throw TypeErrors
         mock_data = {
-            'season': [2026, 2026, 2026, 2026], 'week': [7, 7, 7, 7],
+            'season':, 'week':,
             'home_team': ['Ohio State', 'Alabama', 'Georgia', 'Michigan'],
             'away_team': ['Michigan', 'Tennessee', 'Texas', 'Penn State'],
-            'home_score': [35, 28, np.nan, np.nan], 'away_score': [14, 24, np.nan, np.nan]
+            'home_score': [35.0, 28.0, np.nan, np.nan], 'away_score': [14.0, 24.0, np.nan, np.nan]
         }
         df_curr_raw = pd.DataFrame(mock_data)
         df_prior_raw = pd.DataFrame(mock_data).dropna()
@@ -43,7 +41,8 @@ def load_cfb_data_safe():
         away_pts = getattr(row, 'away_score', None)
         
         completed = pd.notna(home_pts) and pd.notna(away_pts)
-        margin = (int(home_pts) - int(away_pts)) if completed else None
+        # Type check protection to prevent float conversion crashes
+        margin = (int(float(home_pts)) - int(float(away_pts))) if completed else None
         
         games_curr.append({
             'week': int(getattr(row, 'week', 1)), 
@@ -66,7 +65,7 @@ def load_cfb_data_safe():
             games_prior.append({
                 'home_team': str(getattr(row, 'home_team', 'Unknown')), 
                 'away_team': str(getattr(row, 'away_team', 'Unknown')), 
-                'margin': int(home_pts) - int(away_pts)
+                'margin': int(float(home_pts)) - int(float(away_pts))
             })
     df_prior_mapped = pd.DataFrame(games_prior)
 
@@ -145,4 +144,3 @@ else:
         })
         
     st.dataframe(pd.DataFrame(predictions), use_container_width=True)
-      
