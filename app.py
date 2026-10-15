@@ -69,17 +69,17 @@ for idx, row in enumerate(df_past.itertuples()):
     X[idx, t_to_idx[row.home_team]] = 1
     X[idx, t_to_idx[row.away_team]] = -1
     Y[idx] = row.margin - HOME_FIELD_ADVANTAGE
-
-model = Ridge(alpha=1.5, fit_intercept=False)
-model.fit(X, Y)
-
-power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
-power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
+    
+    model = Ridge(alpha=1.5, fit_intercept=False)
+    model.fit(X, Y)
+    
+    power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
+    power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
 
 return df_2026_mapped, current_wk, power_ratings
 
-with st.spinner("Streaming live mirror stats and rendering analytics model..."):
-df_2026, current_week, power_ratings = load_mirror_data()
+    with st.spinner("Streaming live mirror stats and rendering analytics model..."):
+        df_2026, current_week, power_ratings = load_mirror_data()
 
 # ==============================================================================
 # 2. INTERACTIVE MATCHUP UI
