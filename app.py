@@ -99,23 +99,43 @@ if st.button("Generate Custom Spread"):
 # 4. FULL WEEK SCHEDULE VIEW
 # ==============================================================================
 st.header(f"📅 Schedule & Spreads for Week {current_week}")
+
+# Initialize the lines API client
+lines_api = cfbd.LinesApi(cfbd.ApiClient(configuration))
+
 current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
 
 if current_games.empty:
-    st.info("No unplayed regular season games left for this week.")
+st.info("No unplayed regular season games left for this week.")
 else:
-    predictions = []
-    for row in current_games.itertuples():
-        h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
-        a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
+# Fetch all Vegas lines for the current week in one call
+try:
+vegas_data = lines_api.get_lines(year=YEAR, week=current_week, season_type='regular')
+vegas_dict = {g.id: g.lines[0].text for g in vegas_data if g.lines}
+except Exception:
+vegas_dict = {}
 
-        h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
-        a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
+predictions = []
+for row in current_games.itertuples():
+h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
+a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
 
-        margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
-        winner = row.home_team if margin > 0 else row.away_team
-        spread = f"{row.home_team} -{round(margin[0], 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin[0]), 1)}"
+h_rating = h_rating_arr if len(h_rating_arr) > 0 else 0
+a_rating = a_rating_arr if len(a_rating_arr) > 0 else 0
 
-        predictions.append({"Away Team": row.away_team, "Home Team": row.home_team, "Projected Winner": winner, "Model Spread Line": spread})
+margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
+winner = row.home_team if margin > 0 else row.away_team
+spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
 
-    st.dataframe(pd.DataFrame(predictions), use_container_width=True)
+# Grab Vegas line if available, otherwise mark as N/A
+vegas_line = vegas_dict.get(row.id, "N/A")
+
+predictions.append({
+"Away Team": row.away_team,
+"Home Team": row.home_team,
+"Projected Winner": winner,
+"Your Model Line": spread,
+"Vegas Consensus Line": vegas_line
+})
+
+st.dataframe(pd.DataFrame(predictions), use_container_width=True)
