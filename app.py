@@ -26,8 +26,8 @@ def load_cfb_data_safe():
         st.warning("⚠️ External data connection failed. Loading local baseline model instead...")
         # FIXED SYNTAX: Fallback dictionary completely filled out correctly
         mock_data = {
-            'season':, 
-            'week':,
+            'season': [2026, 2026, 2026, 2026], 
+            'week': [7, 7, 7, 7],
             'home_team': ['Ohio State', 'Alabama', 'Georgia', 'Michigan'],
             'away_team': ['Michigan', 'Tennessee', 'Texas', 'Penn State'],
             'home_score': [35.0, 28.0, np.nan, np.nan], 
