@@ -3,41 +3,32 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import Ridge
 
-# Import the core sportsdataverse package for keyless data streaming
-try:
-    import sportsdataverse as sdv
-except ImportError:
-    st.error("Missing dependency. Please make sure sportsdataverse is in your requirements.txt file.")
-    st.stop()
-
 st.set_page_config(page_title="CFB Live Automated Spread Model", layout="wide")
-st.title("🏈 Automated College Football Predictive Model")
+st.title("🏈 Keyless Automated College Football Predictive Model")
 
 YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. LIVE DATA PIPELINE (Using Keyless SportsDataVerse Loaders)
+# 1. LIVE DATA PIPELINE (Using Direct Parquet Storage Releases)
 # ==============================================================================
 @st.cache_data(ttl=1800) # Refreshes schedules automatically every 30 minutes
-def load_sdv_data():
+def load_parquet_mirror():
+    # Stream live schedules directly from SportsDataverse official release distributions
+    url_2026 = f"https://github.com"
+    url_2025 = f"https://github.com"
+    
     try:
-        # Load the live 2026 schedule data natively via SDV package functions
-        df_curr = sdv.cfb.load_cfb_schedules(seasons=[YEAR])
-        df_prior = sdv.cfb.load_cfb_schedules(seasons=[YEAR-1])
+        df_curr = pd.read_parquet(url_2026)
+        df_prior = pd.read_parquet(url_2025)
     except Exception:
-        # Fail-safe direct data loader fallback
-        try:
-            df_curr = pd.read_csv(f"https://githubusercontent.com_{YEAR}.csv")
-            df_prior = pd.read_csv(f"https://githubusercontent.com_{YEAR-1}.csv")
-        except Exception:
-            st.error("❌ The open data mirror is currently undergoing maintenance. Try clearing cache or reloading in a few minutes.")
-            st.stop()
+        st.error("❌ Streamlit is currently unable to read the data format. Make sure 'pyarrow' is listed in your requirements.txt file.")
+        st.stop()
 
     # Process 2026 live schedule mapping
     games_curr = []
     for row in df_curr.itertuples():
-        # Safeguard varying mirror metrics formats (ESPN vs CFBD structures)
+        # Handle variations in open-source mirror column names safely
         home_pts = getattr(row, 'home_score', None) if pd.notna(getattr(row, 'home_score', None)) else getattr(row, 'home_points', None)
         away_pts = getattr(row, 'away_score', None) if pd.notna(getattr(row, 'away_score', None)) else getattr(row, 'away_points', None)
         
@@ -52,11 +43,11 @@ def load_sdv_data():
         })
     df_2026_mapped = pd.DataFrame(games_curr)
 
-    # Automatically identify the active slate week we are playing right now
+    # Automatically identify the active week we are playing right now
     df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
     current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
 
-    # Process 2025 data as historical anchor priors
+    # Map 2025 history to anchor power ratings
     games_prior = []
     for row in df_prior.itertuples():
         home_pts = getattr(row, 'home_score', None) if pd.notna(getattr(row, 'home_score', None)) else getattr(row, 'home_points', None)
@@ -69,11 +60,11 @@ def load_sdv_data():
             })
     df_prior_mapped = pd.DataFrame(games_prior)
 
-    # Combine data sets for modeling
+    # Combine past datasets (weighting current season games higher)
     df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
     df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
 
-    # Set up and fit Ridge Regression equations
+    # Fit Ridge Regression mathematical models
     all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_2026_mapped['home_team'].unique())))
     t_to_idx = {team: i for i, team in enumerate(all_t)}
 
@@ -94,7 +85,7 @@ def load_sdv_data():
     return df_2026_mapped, current_wk, power_ratings
 
 with st.spinner("Streaming live mirror stats and rendering analytics model..."):
-    df_2026, current_week, power_ratings = load_sdv_data()
+    df_2026, current_week, power_ratings = load_parquet_mirror()
 
 # ==============================================================================
 # 2. INTERACTIVE MATCHUP UI
