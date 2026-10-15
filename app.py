@@ -1,4 +1,5 @@
 import streamlit as st
+import cfbd
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import Ridge
@@ -6,73 +7,54 @@ from sklearn.linear_model import Ridge
 st.set_page_config(page_title="CFB Automated Spread Model", layout="wide")
 st.title("🏈 Automated College Football Predictive Model")
 
-YEAR = 2026
+# ==============================================================================
+# 1. API INITIALIZATION
+# ==============================================================================
+RAW_API_KEY = "PASTE_YOUR_KEY_HERE"
+
+clean_key = RAW_API_KEY.replace("Bearer ", "").strip()
+configuration = cfbd.Configuration(access_token=clean_key)
+
+api_instance = cfbd.GamesApi(cfbd.ApiClient(configuration))
+betting_api = cfbd.BettingApi(cfbd.ApiClient(configuration))
+
+YEAR = 2025
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. LIVE DATA PIPELINE (Direct Mainstream Core Loader via CDN Mirror)
+# 2. AUTOMATIC DATA PIPELINE
 # ==============================================================================
-@st.cache_data(ttl=1800)
-def load_cfb_data_safe():
-    # Primary URL and verified global CDN routing to bypass network blocks
-    url_primary = "https://githubusercontent.com"
-    url_mirror = "https://jsdelivr.net"
-    
-    df_all = None
-    
-    # Check connections cleanly
-    try:
-        df_all = pd.read_csv(url_primary, low_memory=False)
-    except Exception:
-        try:
-            df_all = pd.read_csv(url_mirror, low_memory=False)
-        except Exception as e:
-            st.error(f"❌ Network file mapping timed out: {e}")
-            st.stop()
-
-    df_curr_raw = df_all[df_all['season'] == YEAR].copy()
-    df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
-
-    # Process 2026 live schedule mapping
-
+@st.cache_data(ttl=3600)
+def load_and_model_data():
+    all_games_curr = api_instance.get_games(year=YEAR, season_type='regular')
     games_curr = []
-    for row in df_curr_raw.itertuples():
-        home_pts = getattr(row, 'home_score', None)
-        away_pts = getattr(row, 'away_score', None)
-        
-        completed = pd.notna(home_pts) and pd.notna(away_pts)
-        margin = (int(float(home_pts)) - int(float(away_pts))) if completed else None
-        
+    for g in all_games_curr:
         games_curr.append({
-            'week': int(getattr(row, 'week', 1)), 
-            'home_team': str(getattr(row, 'home_team', 'Unknown')), 
-            'away_team': str(getattr(row, 'away_team', 'Unknown')),
-            'margin': margin, 'completed': completed
+            'id': g.id,
+            'week': g.week, 
+            'home_team': g.home_team, 
+            'away_team': g.away_team,
+            'home_points': g.home_points, 
+            'away_points': g.away_points,
+            'margin': g.home_points - g.away_points if g.home_points is not None else None,
+            'completed': g.home_points is not None
         })
-    df_2026_mapped = pd.DataFrame(games_curr)
+    df_curr = pd.DataFrame(games_curr)
 
-    # Identify active week
-    df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
-    current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
+    df_uncompleted = df_curr[df_curr['completed'] == False]
+    current_wk = df_uncompleted['week'].min() if not df_uncompleted.empty else df_curr['week'].max()
 
-    # Map prior year history
+    fallback_games = api_instance.get_games(year=YEAR-1, season_type='regular')
     games_prior = []
-    for row in df_prior_raw.itertuples():
-        home_pts = getattr(row, 'home_score', None)
-        away_pts = getattr(row, 'away_score', None)
-        if pd.notna(home_pts) and pd.notna(away_pts):
-            games_prior.append({
-                'home_team': str(getattr(row, 'home_team', 'Unknown')), 
-                'away_team': str(getattr(row, 'away_team', 'Unknown')), 
-                'margin': int(float(home_pts)) - int(float(away_pts))
-            })
-    df_prior_mapped = pd.DataFrame(games_prior)
+    for g in fallback_games:
+        if g.home_points is not None:
+            games_prior.append({'home_team': g.home_team, 'away_team': g.away_team, 'margin': g.home_points - g.away_points})
+    df_prior = pd.DataFrame(games_prior)
 
-    df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
-    df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
+    df_curr_past = df_curr[df_curr['completed'] == True].copy()
+    df_past = pd.concat([df_prior, df_curr_past, df_curr_past], ignore_index=True)
 
-    # Fit Ridge Regression mathematical models
-    all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_2026_mapped['home_team'].unique())))
+    all_t = sorted(list(set(df_past['home_team'].unique()) | set(df_past['away_team'].unique()) | set(df_curr['home_team'].unique())))
     t_to_idx = {team: i for i, team in enumerate(all_t)}
 
     X = np.zeros((len(df_past), len(all_t)))
@@ -89,13 +71,13 @@ def load_cfb_data_safe():
     power_ratings = pd.DataFrame({'Team': all_t, 'Rating': model.coef_})
     power_ratings['Rating'] = power_ratings['Rating'] - power_ratings['Rating'].mean()
     
-    return df_2026_mapped, current_wk, power_ratings
+    return df_curr, current_wk, power_ratings
 
-with st.spinner("Streaming live football matrix statistics..."):
-    df_2026, current_week, power_ratings = load_cfb_data_safe()
+with st.spinner("Analyzing matchup histories and training model..."):
+    df_curr, current_week, power_ratings = load_and_model_data()
 
 # ==============================================================================
-# 2. INTERACTIVE MATCHUP UI
+# 3. INTERACTIVE MATCHUP UI
 # ==============================================================================
 st.header("🔮 Custom Matchup Predictor")
 col1, col2 = st.columns(2)
@@ -105,13 +87,9 @@ with col2:
     home_select = st.selectbox("Select Home Team", options=power_ratings['Team'].unique(), index=1)
 
 if st.button("Generate Custom Spread"):
-    h_rating_arr = power_ratings.loc[power_ratings['Team'] == home_select, 'Rating'].values
-    a_rating_arr = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
-    
-    h_rating = float(h_rating_arr[0]) if len(h_rating_arr) > 0 else 0.0
-    away_rating = float(a_rating_arr[0]) if len(a_rating_arr) > 0 else 0.0
-    
-    margin = (h_rating - away_rating) + HOME_FIELD_ADVANTAGE
+    h_rating = power_ratings.loc[power_ratings['Team'] == home_select, 'Rating'].values
+    a_rating = power_ratings.loc[power_ratings['Team'] == away_select, 'Rating'].values
+    margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
     
     if margin > 0:
         st.success(f"**Projected Winner:** {home_select} | **Model Line:** {home_select} -{round(margin, 1)}")
@@ -119,31 +97,45 @@ if st.button("Generate Custom Spread"):
         st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin), 1)}")
 
 # ==============================================================================
-# 3. AUTOMATED CURRENT WEEK SCHEDULE VIEW
+# 4. FULL WEEK SCHEDULE VIEW WITH LIVE ODDS COMPARISON
 # ==============================================================================
-st.header(f"📅 Schedule & Predicted Spreads for Week {current_week}")
-current_games = df_2026[(df_2026['completed'] == False) & (df_2026['week'] == current_week)]
+st.header(f"📅 Schedule & Spreads for Week {current_week}")
+current_games = df_curr[(df_curr['completed'] == False) & (df_curr['week'] == current_week)]
 
 if current_games.empty:
-    st.info("No unplayed regular season games left for this week's active window.")
+    st.info("No unplayed regular season games left for this week.")
 else:
+    try:
+        vegas_data = betting_api.get_lines(year=YEAR, week=int(current_week), season_type='regular')
+        vegas_dict = {}
+        for g in vegas_data:
+            if g.lines and len(g.lines) > 0:
+                vegas_dict[g.id] = g.lines[0].formatted_line
+            else:
+                vegas_dict[g.id] = "N/A"
+    except Exception:
+        vegas_dict = {}
+
     predictions = []
     for row in current_games.itertuples():
         h_rating_arr = power_ratings.loc[power_ratings['Team'] == row.home_team, 'Rating'].values
         a_rating_arr = power_ratings.loc[power_ratings['Team'] == row.away_team, 'Rating'].values
         
-        h_rating = float(h_rating_arr[0]) if len(h_rating_arr) > 0 else 0.0
-        a_rating = float(a_rating_arr[0]) if len(a_rating_arr) > 0 else 0.0
+        h_rating = h_rating_arr[0] if len(h_rating_arr) > 0 else 0
+        a_rating = a_rating_arr[0] if len(a_rating_arr) > 0 else 0
         
         margin = (h_rating - a_rating) + HOME_FIELD_ADVANTAGE
         winner = row.home_team if margin > 0 else row.away_team
         spread = f"{row.home_team} -{round(margin, 1)}" if margin > 0 else f"{row.away_team} -{round(abs(margin), 1)}"
         
+        vegas_line = vegas_dict.get(row.id, "N/A")
+        
         predictions.append({
-            "Away Team": row.away_team, 
-            "Home Team": row.home_team, 
-            "Projected Winner": winner, 
-            "Model Spread Line": spread
+            "Away Team": row.away_team,
+            "Home Team": row.home_team,
+            "Projected Winner": winner,
+            "Your Model Line": spread,
+            "Vegas Consensus Line": vegas_line
         })
         
     st.dataframe(pd.DataFrame(predictions), use_container_width=True)
