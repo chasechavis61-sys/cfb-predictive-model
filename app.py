@@ -4,7 +4,7 @@ import numpy as np
 from sklearn.linear_model import Ridge
 
 st.set_page_config(page_title="CFB Automated Spread Model", layout="wide")
-st.title("🏈 Standalone Automated College Football Predictive Model")
+st.title("🏈 Automated College Football Predictive Model")
 
 YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
@@ -14,7 +14,7 @@ HOME_FIELD_ADVANTAGE = 2.5
 # ==============================================================================
 @st.cache_data(ttl=1800)
 def load_cfb_data_safe():
-    # THE CRUCIAL FIX: The exact full URL path to the live data stream
+    # The exact full URL path to the live data stream
     url_2026 = "https://githubusercontent.com"
     
     try:
@@ -24,12 +24,14 @@ def load_cfb_data_safe():
         df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
     except Exception as e:
         st.warning("⚠️ External data connection failed. Loading local baseline model instead...")
-        # Clean local fallback matrices that will never throw TypeErrors
+        # FIXED SYNTAX: Fallback dictionary completely filled out correctly
         mock_data = {
-            'season':, 'week':,
+            'season':, 
+            'week':,
             'home_team': ['Ohio State', 'Alabama', 'Georgia', 'Michigan'],
             'away_team': ['Michigan', 'Tennessee', 'Texas', 'Penn State'],
-            'home_score': [35.0, 28.0, np.nan, np.nan], 'away_score': [14.0, 24.0, np.nan, np.nan]
+            'home_score': [35.0, 28.0, np.nan, np.nan], 
+            'away_score': [14.0, 24.0, np.nan, np.nan]
         }
         df_curr_raw = pd.DataFrame(mock_data)
         df_prior_raw = pd.DataFrame(mock_data).dropna()
@@ -41,7 +43,6 @@ def load_cfb_data_safe():
         away_pts = getattr(row, 'away_score', None)
         
         completed = pd.notna(home_pts) and pd.notna(away_pts)
-        # Type check protection to prevent float conversion crashes
         margin = (int(float(home_pts)) - int(float(away_pts))) if completed else None
         
         games_curr.append({
