@@ -10,35 +10,36 @@ YEAR = 2026
 HOME_FIELD_ADVANTAGE = 2.5
 
 # ==============================================================================
-# 1. LIVE DATA PIPELINE (Using Direct Parquet Storage Releases)
+# 1. LIVE DATA PIPELINE (Official cfbfastR Data Repository)
 # ==============================================================================
-@st.cache_data(ttl=1800) # Refreshes schedules automatically every 30 minutes
-def load_parquet_mirror():
-    # THE FIX: Full paths to the verified data mirrors
-    url_2026 = "https://github.com"
-    url_2025 = "https://github.com"
+@st.cache_data(ttl=1800) # Auto-refreshes data every 30 minutes
+def load_live_cfb_data():
+    # Official stable storage links for cfbfastR schedule data assets
+    url_2026 = "https://githubusercontent.com"
     
     try:
-        df_curr = pd.read_parquet(url_2026)
-        df_prior = pd.read_parquet(url_2025)
+        df_all = pd.read_csv(url_2026, low_memory=False)
     except Exception as e:
-        st.error(f"❌ Error loading data: {e}. Make sure 'pyarrow' is listed in your requiremnets.txt file.")
+        st.error(f"❌ Error connecting to data source: {e}")
         st.stop()
 
-    # Process 2026 live schedule mapping
+    # Filter out only the current year and prior year for modeling anchor points
+    df_curr_raw = df_all[df_all['season'] == YEAR].copy()
+    df_prior_raw = df_all[df_all['season'] == (YEAR - 1)].copy()
+
+    # Process current season schedule mapping
     games_curr = []
-    for row in df_curr.itertuples():
-        # Handle variations in open-source mirror column names safely
-        home_pts = getattr(row, 'home_score', None) if pd.notna(getattr(row, 'home_score', None)) else getattr(row, 'home_points', None)
-        away_pts = getattr(row, 'away_score', None) if pd.notna(getattr(row, 'away_score', None)) else getattr(row, 'away_points', None)
+    for row in df_curr_raw.itertuples():
+        home_pts = getattr(row, 'home_score', None)
+        away_pts = getattr(row, 'away_score', None)
         
         completed = pd.notna(home_pts) and pd.notna(away_pts)
         margin = (int(home_pts) - int(away_pts)) if completed else None
         
         games_curr.append({
             'week': int(getattr(row, 'week', 1)), 
-            'home_team': str(getattr(row, 'home_team', getattr(row, 'home_name', 'Unknown'))), 
-            'away_team': str(getattr(row, 'away_team', getattr(row, 'away_name', 'Unknown'))),
+            'home_team': str(getattr(row, 'home_team', 'Unknown')), 
+            'away_team': str(getattr(row, 'away_team', 'Unknown')),
             'margin': margin, 'completed': completed
         })
     df_2026_mapped = pd.DataFrame(games_curr)
@@ -47,20 +48,20 @@ def load_parquet_mirror():
     df_uncompleted = df_2026_mapped[df_2026_mapped['completed'] == False]
     current_wk = int(df_uncompleted['week'].min()) if not df_uncompleted.empty else int(df_2026_mapped['week'].max())
 
-    # Map 2025 history to anchor power ratings
+    # Map prior year history to anchor power ratings
     games_prior = []
-    for row in df_prior.itertuples():
-        home_pts = getattr(row, 'home_score', None) if pd.notna(getattr(row, 'home_score', None)) else getattr(row, 'home_points', None)
-        away_pts = getattr(row, 'away_score', None) if pd.notna(getattr(row, 'away_score', None)) else getattr(row, 'away_points', None)
+    for row in df_prior_raw.itertuples():
+        home_pts = getattr(row, 'home_score', None)
+        away_pts = getattr(row, 'away_score', None)
         if pd.notna(home_pts) and pd.notna(away_pts):
             games_prior.append({
-                'home_team': str(getattr(row, 'home_team', getattr(row, 'home_name', 'Unknown'))), 
-                'away_team': str(getattr(row, 'away_team', getattr(row, 'away_name', 'Unknown'))), 
+                'home_team': str(getattr(row, 'home_team', 'Unknown')), 
+                'away_team': str(getattr(row, 'away_team', 'Unknown')), 
                 'margin': int(home_pts) - int(away_pts)
             })
     df_prior_mapped = pd.DataFrame(games_prior)
 
-    # Combine past datasets (weighting current season games higher)
+    # Combine past datasets (giving current season games higher weight)
     df_curr_past = df_2026_mapped[df_2026_mapped['completed'] == True].copy()
     df_past = pd.concat([df_prior_mapped, df_curr_past, df_curr_past], ignore_index=True)
 
@@ -84,8 +85,8 @@ def load_parquet_mirror():
     
     return df_2026_mapped, current_wk, power_ratings
 
-with st.spinner("Streaming live mirror stats and rendering analytics model..."):
-    df_2026, current_week, power_ratings = load_parquet_mirror()
+with st.spinner("Streaming data from official repository assets..."):
+    df_2026, current_week, power_ratings = load_live_cfb_data()
 
 # ==============================================================================
 # 2. INTERACTIVE MATCHUP UI
@@ -108,7 +109,7 @@ if st.button("Generate Custom Spread"):
         st.success(f"**Projected Winner:** {away_select} | **Model Line:** {away_select} -{round(abs(margin), 1)}")
 
 # ==============================================================================
-# 3. AUTOMATED SCHEDULE VIEW
+# 3. AUTOMATED CURRENT WEEK SCHEDULE VIEW
 # ==============================================================================
 st.header(f"📅 Schedule & Predicted Spreads for Week {current_week}")
 current_games = df_2026[(df_2026['completed'] == False) & (df_2026['week'] == current_week)]
