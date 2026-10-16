@@ -59,8 +59,7 @@ for year in training_years:
                 st.warning(f"CFBD API responded with status {response.status_code} for season {year}")
         except Exception as e:
             st.error(f"Error compiling history for {year}: {e}")
-            
-    return elo_ratings
+            return elo_ratings
 
 def generate_score_projection(home_team, away_team, elo_dict):
     """Calculates final scores and cover logic using the trained Elo ratings."""
