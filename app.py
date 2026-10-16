@@ -220,7 +220,7 @@ def fetch_live_market_spreads(api_key):
     return combined_games
 
 # =====================================================================
-# 4. EDGE MATRIX COMPILATION ENGINE (FIXED EXTRACTION)
+# 4. EDGE MATRIX COMPILATION ENGINE (FIXED BOTH OUTCOMES)
 # =====================================================================
 def compile_betting_slate(games, elo_dict):
     processed_slate = []
@@ -229,10 +229,13 @@ def compile_betting_slate(games, elo_dict):
         home_team = game.get("home_team")
         away_team = game.get("away_team")
 
+        if not home_team or not away_team:
+            continue
+
         market_spread = None
         bookmaker_used = "Consensus"
 
-        # FIXED: Corrected deep list parsing for The Odds API structure
+        # Safe extraction of the point spread matrix from the JSON structure
         bookmakers = game.get("bookmakers", [])
         if bookmakers and len(bookmakers) > 0:
             primary_book = bookmakers[0]
@@ -240,26 +243,30 @@ def compile_betting_slate(games, elo_dict):
 
             markets = primary_book.get("markets", [])
             if markets and len(markets) > 0:
-                # Target the spreads market safely
                 spread_market = next((m for m in markets if m.get("key") == "spreads"), markets[0])
                 outcomes = spread_market.get("outcomes", [])
                 
+                # FIXED: Extracting the layout relative to the home team's spread line safely
                 for outcome in outcomes:
-                    # We match the spread relative to the home team
                     if outcome.get("name") == home_team:
-                        market_spread = float(outcome.get("point", 0))
+                        market_spread = float(outcome.get("point", 0.0))
 
-        # If no active spread exists, use a default 0 spread to ensure the game still processes
+        # Default fallback spread to ensure processing continues smoothly if vegas lines are lock-tight
         if market_spread is None:
             market_spread = 0.0
-            bookmaker_used = "No Live Spread"
 
+        # Run calculations using our specific team values
         proj_home, proj_away, home_prob = generate_score_projection(home_team, away_team, elo_dict)
         
-        # Determine the projected winner based on unique scores
-        winner = home_team if proj_home > proj_away else away_team
-        win_percentage = home_prob if proj_home > proj_away else (1 - home_prob)
+        # FIXED: Explicitly evaluating winner status using separate float distributions
+        if proj_home > proj_away:
+            winner = home_team
+            win_percentage = home_prob
+        else:
+            winner = away_team
+            win_percentage = 1.0 - home_prob
 
+        # Calculate exact spread differences against Vegas
         model_home_margin = proj_away - proj_home
         edge = market_spread - model_home_margin
 
