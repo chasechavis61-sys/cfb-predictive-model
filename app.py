@@ -156,7 +156,7 @@ def compile_betting_slate(games, elo_dict):
 # =====================================================================
 st.set_page_config(page_title="All-D1 Predictive Matrix", layout="wide")
 
-st.title("ģ Ultimate All-D1 CFB Algorithmic Betting Matrix")
+st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
 st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
 
 if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
