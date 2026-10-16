@@ -14,10 +14,9 @@ THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
 # =====================================================================
 def get_compiled_elo_ratings():
     """
-    Seeded baseline Elo power distribution matrix. Bypasses CFBD v2 
+    Seeded baseline Elo power distribution matrix. Bypasses CFBD v2
     API key limit failures while preserving real-world program variance.
-    
-"""
+    """
     return {
         # SEC
         "Georgia": 1780.0, "Alabama": 1755.0, "Texas": 1745.0, "Ole Miss": 1695.0,
@@ -156,7 +155,7 @@ def compile_betting_slate(games, elo_dict):
 
             markets = primary_book.get("markets", [])
             spread_market = next((m for m in markets if m.get("key") == "spreads"), None)
-            
+
             if spread_market:
                 outcomes = spread_market.get("outcomes", [])
                 for outcome in outcomes:
@@ -168,7 +167,7 @@ def compile_betting_slate(games, elo_dict):
             bookmaker_used = "No Live Line"
 
         proj_home, proj_away, home_prob = generate_score_projection(home_team, away_team, elo_dict)
-        
+
         if proj_home > proj_away:
             winner = home_team
             win_percentage = home_prob
@@ -190,7 +189,49 @@ def compile_betting_slate(games, elo_dict):
         else:
             lean = "➡️ Pass / No Value"
 
+        # FIXED: Corrected the unclosed dictionary key and successfully returned the DataFrame
         processed_slate.append({
             "Home Program": home_team,
             "Away Program": away_team,
-            "Live Vegas Spread": f"{home_team} {market_spread}
+            "Live Vegas Spread": f"{home_team} {market_spread} ({bookmaker_used})",
+            "Model Score Projection": f"{proj_away:.1f} - {proj_home:.1f}",
+            "Outright Winner Projection": f"{winner} ({win_percentage:.0%})",
+            "Calculated Algorithmic Lean": lean
+        })
+
+    return pd.DataFrame(processed_slate)
+
+# =====================================================================
+# 5. STREAMLIT VISUAL FRONTEND UI
+# =====================================================================
+st.set_page_config(page_title="All-D1 Predictive Matrix", layout="wide")
+
+st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
+st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
+
+if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE":
+    st.error("🔑 Key Insertion Required: Update credentials inside the script.")
+else:
+    status_box = st.info("Step 1: Accessing seeded database...")
+    trained_elo_database = get_compiled_elo_ratings()
+
+    status_box.info("Step 2: Connecting to sportsbooks to collect live games and spreads...")
+    live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
+
+    status_box.empty()
+
+    if live_odds_feed:
+        df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
+
+        if not df_slate.empty:
+            search_query = st.text_input("🔍 Search for a team:", "").lower()
+            if search_query:
+                df_slate = df_slate[
+                    df_slate["Home Program"].str.lower().str.contains(search_query) |
+                    df_slate["Away Program"].str.lower().str.contains(search_query)
+                ]
+            st.dataframe(df_slate, use_container_width=True, hide_index=True)
+        else:
+            st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now.")
+    else:
+        st.error("❌ Failed to download any upcoming odds. Check the API settings.")
