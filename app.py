@@ -21,11 +21,9 @@ def train_cfb_elo_model(api_key):
     HOME_ADVANTAGE = 55 
     
     headers = {"Authorization": f"Bearer {api_key}"}
+
     
-    # ✅ FIXED: Explicitly defined years to resolve the compiler syntax error
-    training_years = [2024, 2025, 2026]
-    
-    for year in training_years:
+for year in training_years:
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
