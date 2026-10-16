@@ -84,8 +84,7 @@ def get_closest_elo(team_name, elo_dict):
         matched_team = closest_matches[0] # Grab the actual string item from the match list
         return elo_dict[matched_team]
         
-    
-return 1500.0  # Fallback baseline if absolutely no match is found 
+    return 1500.0  # Fallback baseline if absolutely no match if found
 
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
