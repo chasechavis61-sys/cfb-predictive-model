@@ -20,10 +20,6 @@ def train_cfb_elo_model(api_key):
     HOME_ADVANTAGE = 55 
     
     headers = {"Authorization": f"Bearer {api_key}"}
-    
-    # FIXED: Added the specific years to train historical team ratings
-    for year in:
-        url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
