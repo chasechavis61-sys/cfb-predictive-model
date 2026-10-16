@@ -213,5 +213,5 @@ else:
         
         if not df_slate.empty:
             # Dropdown menu to easily toggle and look for high value options instantly
-            bet_filter = st.selectbox(
+            bet_filter = st.selectbox()
                 "Filter Board by Grade:",
