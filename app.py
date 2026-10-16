@@ -21,12 +21,11 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Restored the complete list and added 2026 for the current season
-    for year in:
-        url = f"https://collegefootballdata.com{year}&seasonType=regular"
+    # FIXED: Replaced empty 'in:' loop with a valid range of years and corrected indentation below
+    for year in range(2020, 2027):
+        url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=regular"
         try:
-            
-response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 games = response.json()
                 games = sorted(games, key=lambda x: x.get('week', 0))
@@ -64,12 +63,12 @@ def get_closest_elo(team_name, elo_dict):
     """Helper function to map mismatched team names from different APIs."""
     if team_name in elo_dict:
         return elo_dict[team_name]
-    
+
     # Find closest match in the Elo database if exact match fails
     closest_matches = difflib.get_close_matches(team_name, elo_dict.keys(), n=1, cutoff=0.4)
     if closest_matches:
         return elo_dict[closest_matches[0]]
-        
+
     return 1500.0  # Fallback if absolutely no match is found
 
 def generate_score_projection(home_team, away_team, elo_dict):
