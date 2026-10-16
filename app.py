@@ -187,3 +187,23 @@ else:
             st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now. (Common if checked mid-week before lines post, or off-season).")
     else:
         st.error("❌ Failed to download any upcoming odds. Check the error notifications above for structural details.")
+
+  # =================================================================
+    # ✅ FIXED SECTION 1: SIDEBAR INTERACTIVE MATCHUP SIMULATOR W/ TEXT WRAPPING
+    # =================================================================
+    st.sidebar.markdown("## 🧮 Section 1: Custom Matchup Simulator")
+    st.sidebar.write("Select two teams to run a custom head-to-head score model simulation.")
+    
+    sim_home = st.sidebar.selectbox("Home Team", all_teams, index=all_teams.index("Georgia") if "Georgia" in all_teams else 0)
+    sim_away = st.sidebar.selectbox("Away Team", all_teams, index=all_teams.index("Alabama") if "Alabama" in all_teams else 1)
+    
+    if sim_home and sim_away:
+        s_home, s_away, s_prob = generate_score_projection(sim_home, sim_away, trained_elo_database)
+        model_spread = s_away - s_home
+        
+        # Using markdown blocks instead of rigid metric boxes ensures text wrapping is flawless
+        st.sidebar.markdown("---")
+        st.sidebar.markdown(f"#### 📊 Projection Results:")
+        st.sidebar.markdown(f"**Score Prediction:**  \n`{sim_away} {s_away:.1f}` vs. `{sim_home} {s_home:.1f}`")
+        st.sidebar.markdown(f"**Algorithmic Implied Spread:**  \n`{sim_home} {model_spread:+.1f}`")
+        st.sidebar.markdown("---")
