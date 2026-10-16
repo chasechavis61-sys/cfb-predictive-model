@@ -222,6 +222,3 @@ if processed_slate:
     st.dataframe(df_slate, use_container_width=True, hide_index=True)
 else:
     st.warning("ģ  Connected to live streams. The board will automatically display games as sportsbooks release the weekly slates.")
-    st.dataframe(df_slate, use_container_width=True, hide_index=True)
-else:
-    st.warning("⚠️ Connected to live streams. The board will automatically display games as sportsbooks release the weekly slates.")
