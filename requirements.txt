@@ -1,4 +1,5 @@
 streamlit
+cfbd
 pandas
 numpy
 scikit-learn
