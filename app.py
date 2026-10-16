@@ -20,7 +20,7 @@ def train_cfb_elo_model(api_key):
     HOME_ADVANTAGE = 55 
     
 headers = {"Authorization": f"Bearer {api_key}"}
-    training_years = [2024, 2025, 2026]
+training_years = [2024, 2025, 2026]
 
         try:
             response = requests.get(url, headers=headers)
