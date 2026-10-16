@@ -24,7 +24,7 @@ def train_cfb_elo_model(api_key):
 
     # Pulls data up to the current 2026 season dynamically
     for year in range(2023, 2027):
-        url = f"https://collegefootballdata.com{year}&seasonType=regular"
+        url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -172,7 +172,7 @@ def compile_betting_slate(games, elo_dict):
 
             markets = primary_book.get("markets", [])
             spread_market = next((m for m in markets if m.get("key") == "spreads"), None)
-            
+
             if spread_market:
                 outcomes = spread_market.get("outcomes", [])
                 for outcome in outcomes:
@@ -184,7 +184,7 @@ def compile_betting_slate(games, elo_dict):
             bookmaker_used = "No Live Line"
 
         proj_home, proj_away, home_prob = generate_score_projection(home_team, away_team, elo_dict)
-        
+
         if proj_home > proj_away:
             winner = home_team
             win_percentage = home_prob
@@ -206,6 +206,49 @@ def compile_betting_slate(games, elo_dict):
         else:
             lean = "➡️ Pass / No Value"
 
+        # FIXED: Completed dictionary format, closed the list append, and returned dataframe
         processed_slate.append({
             "Home Program": home_team,
             "Away Program": away_team,
+            "Live Vegas Spread": f"{home_team} {market_spread} ({bookmaker_used})",
+            "Model Score Projection": f"{proj_away:.1f} - {proj_home:.1f}",
+            "Outright Winner Projection": f"{winner} ({win_percentage:.0%})",
+            "Calculated Algorithmic Lean": lean
+        })
+
+    return pd.DataFrame(processed_slate)
+
+# =====================================================================
+# 5. STREAMLIT VISUAL FRONTEND UI
+# =====================================================================
+st.set_page_config(page_title="All-D1 Predictive Matrix", layout="wide")
+
+st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
+st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
+
+if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
+    st.error("🔑 Key Insertion Required: Update credentials inside the script.")
+else:
+    status_box = st.info("Step 1: Running Elo calculations across thousands of historical D1 matches...")
+    trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
+
+    status_box.info("Step 2: Connecting to sportsbooks to collect live games and spreads...")
+    live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
+
+    status_box.empty()
+
+    if live_odds_feed:
+        df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
+
+        if not df_slate.empty:
+            search_query = st.text_input("🔍 Search for a team:", "").lower()
+            if search_query:
+                df_slate = df_slate[
+                    df_slate["Home Program"].str.lower().str.contains(search_query) |
+                    df_slate["Away Program"].str.lower().str.contains(search_query)
+                ]
+            st.dataframe(df_slate, use_container_width=True, hide_index=True)
+        else:
+            st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now.")
+    else:
+        st.error("❌ Failed to download any upcoming odds. Check the API settings.")
