@@ -7,24 +7,22 @@ import numpy as np
 # 1. API CONFIGURATION
 # =====================================================================
 # 🛑 PASTE YOUR ACTIVE API KEYS HERE:
-THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
-CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
+THE_ODDS_API_KEY = "YOUR_THE_ODDS_API_KEY_HERE"
+CFBD_API_KEY = "YOUR_CFBD_API_KEY_HERE"
 
 # =====================================================================
 # 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
 # =====================================================================
-
 @st.cache_data(ttl=86400)
 def train_cfb_elo_model(api_key):
-    """Trains a math-based Elo system by processing past games chronologically."""
     elo_ratings = {}
     K_FACTOR = 35       
     HOME_ADVANTAGE = 55 
     
     headers = {"Authorization": f"Bearer {api_key}"}
-    training_years = [2024, 2025, 2026]
     
-    for year in training_years:
+    # Train over the last few regular seasons to establish accurate power metrics
+    for year in [2024, 2025, 2026]:
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
@@ -57,12 +55,11 @@ def train_cfb_elo_model(api_key):
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
         except Exception as e:
-            pass
+            st.warning(f"Error compiling history for {year}: {e}")
             
     return elo_ratings
 
 def generate_score_projection(home_team, away_team, elo_dict):
-    """Calculates final scores using the trained Elo ratings database."""
     HOME_ADVANTAGE_ELO = 55
     BASE_AVG_SCORE = 28.0 
     POINTS_PER_ELO = 25.0 
@@ -78,11 +75,10 @@ def generate_score_projection(home_team, away_team, elo_dict):
     return proj_home, proj_away, win_prob
 
 # =====================================================================
-# 3. LIVE MARKET SYNCHRONIZATION PIPELINE (ISOLATING FANDUEL)
+# 3. LIVE MARKET SYNCHRONIZATION PIPELINE
 # =====================================================================
 @st.cache_data(ttl=3600)
 def fetch_live_market_spreads(api_key):
-    """Pulls betting spreads across both FBS and FCS division channels."""
     combined_games = []
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
     
@@ -93,37 +89,11 @@ def fetch_live_market_spreads(api_key):
             response = requests.get(url, params=params)
             if response.status_code == 200:
                 combined_games.extend(response.json())
-        except:
-            pass
+            else:
+                st.error(f"The Odds API Error ({key}): Status Code {response.status_code} - {response.text}")
+        except Exception as e:
+            st.error(f"Network error linking to The Odds API: {e}")
     return combined_games
-
-def extract_fanduel_spread(game):
-    """
-    ✅ FIXED: Correctly iterates through nested bookmaker lists and market lists 
-    to extract point spreads without causing silent runtime array exceptions.
-    """
-    bookmakers = game.get("bookmakers", [])
-    if not bookmakers:
-        return None, "No Line"
-        
-    # Step A: Target FanDuel explicitly
-    for bookmaker in bookmakers:
-        if bookmaker.get("key", "").lower() == "fanduel":
-            for market in bookmaker.get("markets", []):
-                if market.get("key") == "spreads":
-                    for outcome in market.get("outcomes", []):
-                        if outcome.get("name") == game["home_team"]:
-                            return float(outcome["point"]), "FanDuel"
-                            
-    # Step B: Fallback to the first available sportsbook so the match remains visible
-    first_book = bookmakers[0]
-    for market in first_book.get("markets", []):
-        if market.get("key") == "spreads":
-            for outcome in market.get("outcomes", []):
-                if outcome.get("name") == game["home_team"]:
-                    return float(outcome["point"]), f"{first_book.get('title')} (FD Alternate)"
-                    
-    return None, "No Line"
 
 # =====================================================================
 # 4. EDGE MATRIX COMPILATION ENGINE
@@ -135,7 +105,21 @@ def compile_betting_slate(games, elo_dict):
         home_team = game["home_team"]
         away_team = game["away_team"]
         
-        market_spread, book_source = extract_fanduel_spread(game)
+        market_spread = None
+        bookmaker_used = "Consensus"
+        
+        # FIXED: Loop through the bookmakers list array to avoid silent page crashes
+        if game.get("bookmakers") and len(game["bookmakers"]) > 0:
+            primary_book = game["bookmakers"][0] # Take the first bookmaker (e.g. DraftKings)
+            bookmaker_used = primary_book.get("title", "Unknown")
+            
+            markets = primary_book.get("markets", [])
+            if markets and len(markets) > 0:
+                outcomes = markets[0].get("outcomes", [])
+                for outcome in outcomes:
+                    if outcome["name"] == home_team:
+                        market_spread = float(outcome["point"])
+                        
         if market_spread is None:
             continue
             
@@ -155,18 +139,19 @@ def compile_betting_slate(games, elo_dict):
         elif edge < -1.5:
             lean = f"➡️ {away_team} (+{abs(market_spread)}) Slight Lean"
         else:
-            lean = "❌ Pass"
+            lean = "❌ Pass / No Value"
             
         processed_slate.append({
             "Home Program": home_team,
             "Away Program": away_team,
-            "Live Market Spread": f"{home_team} {market_spread} ({book_source})",
+            "Live Vegas Spread": f"{home_team} {market_spread} ({bookmaker_used})",
             "Model Score Projection": f"{proj_away:.1f} - {proj_home:.1f}",
             "Outright Winner Projection": f"{winner} ({win_percentage:.0%})",
             "Calculated Algorithmic Lean": lean
         })
         
-    return pd.DataFrame(processed_slate)
+    
+return pd.DataFrame(processed_slate)
 
 # =====================================================================
 # 5. STREAMLIT VISUAL FRONTEND UI
@@ -174,46 +159,32 @@ def compile_betting_slate(games, elo_dict):
 st.set_page_config(page_title="All-D1 Predictive Matrix", layout="wide")
 
 st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
+st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
 
 if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
-    st.error("🚨 Key Insertion Required: Please update lines 10 & 11 with your API credentials.")
+    st.error("🚨 Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
 else:
-    # Train data model base
+    # Diagnostic step to give feedback right away instead of a blank screen
+    status_box = st.info("Step 1: Running Elo calculations across thousands of historical D1 matches...")
     trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
+    
+    status_box.info("Step 2: Connecting to sportsbooks to collect live games and spreads...")
     live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
     
-    # Safely generate the total program list out of calculated historic entities
-    all_teams = sorted(list(trained_elo_database.keys())) if trained_elo_database else ["Georgia", "Alabama", "Ohio State", "Clemson"]
-
-    # =================================================================
-    # SECTION 1: SIDEBAR INTERACTIVE MATCHUP SIMULATOR
-    # =================================================================
-    st.sidebar.markdown("## 🧮 Section 1: Custom Matchup Simulator")
-    st.sidebar.write("Select any two teams to run a private head-to-head score model simulation.")
-    
-    sim_home = st.sidebar.selectbox("Home Team", all_teams, index=all_teams.index("Georgia") if "Georgia" in all_teams else 0)
-    sim_away = st.sidebar.selectbox("Away Team", all_teams, index=all_teams.index("Alabama") if "Alabama" in all_teams else 1)
-    
-    if sim_home and sim_away:
-        s_home, s_away, s_prob = generate_score_projection(sim_home, sim_away, trained_elo_database)
-        model_spread = s_away - s_home
-        
-        st.sidebar.metric("Projected Score Outcome", f"{sim_away} {s_away:.1f} - {sim_home} {s_home:.1f}")
-        st.sidebar.metric("Model Implied Fair Line", f"{sim_home} {model_spread:+.1f}")
-
-    # =================================================================
-    # SECTION 2: MAIN SLATE VISUAL MATRIX BOARD
-    # =================================================================
-    st.markdown("## 📅 Section 2: All D1 Matches vs. Point Spread Board")
+    status_box.empty() # Clear loading status messages
     
     if live_odds_feed:
         df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
         
         if not df_slate.empty:
-            search_query = st.text_input("🔍 Filter the board by team name (e.g. Clemson, Texas):", "").lower()
+            search_query = st.text_input("🔍 Search for a team:", "").lower()
             if search_query:
                 df_slate = df_slate[
                     df_slate["Home Program"].str.lower().str.contains(search_query) | 
                     df_slate["Away Program"].str.lower().str.contains(search_query)
                 ]
-            # Displays 100% of matchups in a massive scrollable sheet directly
+            st.dataframe(df_slate, use_container_width=True, hide_index=True)
+        else:
+            st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now. (Common if checked mid-week before lines post, or off-season).")
+    else:
+        st.error("❌ Failed to download any upcoming odds. Check the error notifications above for structural details.")
