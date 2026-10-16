@@ -13,6 +13,7 @@ CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN
 # =====================================================================
 # 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
 # =====================================================================
+
 @st.cache_data(ttl=86400)
 def train_cfb_elo_model(api_key):
     """Trains a math-based Elo system by processing past games chronologically."""
@@ -21,9 +22,7 @@ def train_cfb_elo_model(api_key):
     HOME_ADVANTAGE = 55 
     
     headers = {"Authorization": f"Bearer {api_key}"}
-    
-    # ✅ FIX: Explicitly passing a proper array loop instead of an empty colon statement
-    training_years = [2024, 2025]
+    training_years = [2024, 2025, 2026]
     
     for year in training_years:
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
@@ -59,7 +58,6 @@ def train_cfb_elo_model(api_key):
                     elo_ratings[away_team] -= shift
         except Exception as e:
             pass
-
             
     return elo_ratings
 
@@ -89,7 +87,7 @@ def fetch_live_market_spreads(api_key):
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
     
     for key in sport_keys:
-        url = f"https://the-odds-api.com{key}/odds/"
+        url = f"https://api.the-odds-api.com/v4/sports/{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
             response = requests.get(url, params=params)
@@ -100,28 +98,32 @@ def fetch_live_market_spreads(api_key):
     return combined_games
 
 def extract_fanduel_spread(game):
-    """Isolates FanDuel spread data. Falls back to other books so NO matches are hidden."""
-    if game.get("bookmakers") and len(game["bookmakers"]) > 0:
-        # Check specifically for FanDuel lines first
-        for bookmaker in game["bookmakers"]:
-            if bookmaker.get("key", "").lower() == "fanduel":
-                markets = bookmaker.get("markets", [])
-                if markets:
-                    outcomes = markets[0].get("outcomes", [])
-                    for outcome in outcomes:
-                        if outcome["name"] == game["home_team"]:
+    """
+    ✅ FIXED: Correctly iterates through nested bookmaker lists and market lists 
+    to extract point spreads without causing silent runtime array exceptions.
+    """
+    bookmakers = game.get("bookmakers", [])
+    if not bookmakers:
+        return None, "No Line"
+        
+    # Step A: Target FanDuel explicitly
+    for bookmaker in bookmakers:
+        if bookmaker.get("key", "").lower() == "fanduel":
+            for market in bookmaker.get("markets", []):
+                if market.get("key") == "spreads":
+                    for outcome in market.get("outcomes", []):
+                        if outcome.get("name") == game["home_team"]:
                             return float(outcome["point"]), "FanDuel"
                             
-        # ✅ FIX: Fallback automatically to first alternative book to ensure the match displays
-        first_available_book = game["bookmakers"][0]
-        markets = first_available_book.get("markets", [])
-        if markets:
-            outcomes = markets[0].get("outcomes", [])
-            for outcome in outcomes:
-                if outcome["name"] == game["home_team"]:
-                    return float(outcome["point"]), f"{first_available_book.get('title')} (FD Alternative)"
+    # Step B: Fallback to the first available sportsbook so the match remains visible
+    first_book = bookmakers[0]
+    for market in first_book.get("markets", []):
+        if market.get("key") == "spreads":
+            for outcome in market.get("outcomes", []):
+                if outcome.get("name") == game["home_team"]:
+                    return float(outcome["point"]), f"{first_book.get('title')} (FD Alternate)"
                     
-    return 0.0, "Opening Line / PK"
+    return None, "No Line"
 
 # =====================================================================
 # 4. EDGE MATRIX COMPILATION ENGINE
@@ -134,6 +136,8 @@ def compile_betting_slate(games, elo_dict):
         away_team = game["away_team"]
         
         market_spread, book_source = extract_fanduel_spread(game)
+        if market_spread is None:
+            continue
             
         proj_home, proj_away, home_prob = generate_score_projection(home_team, away_team, elo_dict)
         winner = home_team if proj_home > proj_away else away_team
@@ -177,27 +181,28 @@ else:
     # Train data model base
     trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
     live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
+    
+    # Safely generate the total program list out of calculated historic entities
     all_teams = sorted(list(trained_elo_database.keys())) if trained_elo_database else ["Georgia", "Alabama", "Ohio State", "Clemson"]
 
     # =================================================================
-    # LAYOUT CHANGE: SPLIT INTO TWO SEPARATE VISUAL SECTIONS
+    # SECTION 1: SIDEBAR INTERACTIVE MATCHUP SIMULATOR
     # =================================================================
     st.sidebar.markdown("## 🧮 Section 1: Custom Matchup Simulator")
     st.sidebar.write("Select any two teams to run a private head-to-head score model simulation.")
     
-    sim_home = st.sidebar.selectbox("Home Team", all_teams, index=0)
-    sim_away = st.sidebar.selectbox("Away Team", all_teams, index=min(1, len(all_teams)-1))
+    sim_home = st.sidebar.selectbox("Home Team", all_teams, index=all_teams.index("Georgia") if "Georgia" in all_teams else 0)
+    sim_away = st.sidebar.selectbox("Away Team", all_teams, index=all_teams.index("Alabama") if "Alabama" in all_teams else 1)
     
     if sim_home and sim_away:
         s_home, s_away, s_prob = generate_score_projection(sim_home, sim_away, trained_elo_database)
         model_spread = s_away - s_home
         
-        # Display simulated metrics results inside the sidebar container layout
         st.sidebar.metric("Projected Score Outcome", f"{sim_away} {s_away:.1f} - {sim_home} {s_home:.1f}")
         st.sidebar.metric("Model Implied Fair Line", f"{sim_home} {model_spread:+.1f}")
 
     # =================================================================
-    # MAIN DISPLAY: SECTION 2 - ALL MATCHES VS SPREAD
+    # SECTION 2: MAIN SLATE VISUAL MATRIX BOARD
     # =================================================================
     st.markdown("## 📅 Section 2: All D1 Matches vs. Point Spread Board")
     
@@ -205,11 +210,9 @@ else:
         df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
         
         if not df_slate.empty:
-            search_query = st.text_input("🔍 Filter the board by team name:", "").lower()
+            search_query = st.text_input("🔍 Filter the board by team name (e.g. Clemson, Texas):", "").lower()
             if search_query:
                 df_slate = df_slate[
                     df_slate["Home Program"].str.lower().str.contains(search_query) | 
                     df_slate["Away Program"].str.lower().str.contains(search_query)
                 ]
-            
-            # Formats clean output table displaying 100% of games caught from endpoints
