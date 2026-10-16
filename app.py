@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
+import difflab
 
 # =====================================================================
 # 1. API CONFIGURATION
@@ -11,61 +12,30 @@ THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
 CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
 # =====================================================================
-# 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
+# 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE (ADJUSTED)
 # =====================================================================
-@st.cache_data(ttl=86400)
-def train_cfb_elo_model(api_key):
-    elo_ratings = {}
-    K_FACTOR = 35
-    HOME_ADVANTAGE = 55
 
-    headers = {"Authorization": f"Bearer {api_key}"}
-
-    # FIXED: Added the specific years to train historical team ratings
-    for year in [2023, 2024, 2025]:
-        url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=regular"
-        try:
-            response = requests.get(url, headers=headers)
-            if response.status_code == 200:
-                games = response.json()
-                games = sorted(games, key=lambda x: x.get('week', 0))
-
-                for game in games:
-                    if game.get('home_points') is None or game.get('away_points') is None:
-                        continue
-
-                    home_team = game['home_team']
-                    away_team = game['away_team']
-                    home_score = int(game['home_points'])
-                    away_score = int(game['away_points'])
-
-                    if home_team not in elo_ratings: elo_ratings[home_team] = 1500.0
-                    if away_team not in elo_ratings: elo_ratings[away_team] = 1500.0
-
-                    r_home = elo_ratings[home_team] + HOME_ADVANTAGE
-                    r_away = elo_ratings[away_team]
-
-                    exp_home = 1 / (1 + 10 ** ((r_away - r_home) / 400))
-                    actual_home = 1.0 if home_score > away_score else (0.5 if home_score == away_score else 0.0)
-
-                    margin = abs(home_score - away_score)
-                    mov_multiplier = np.log(margin + 1) * (2.2 / ((r_home - r_away) * 0.001 + 2.2)) if margin > 0 else 1.0
-
-                    shift = K_FACTOR * mov_multiplier * (actual_home - exp_home)
-                    elo_ratings[home_team] += shift
-                    elo_ratings[away_team] -= shift
-        except Exception as e:
-            st.warning(f"Error compiling history for {year}: {e}")
-
-    return elo_ratings
+def get_closest_elo(team_name, elo_dict):
+    """Helper function to map mismatched team names from different APIs."""
+    if team_name in elo_dict:
+        return elo_dict[team_name]
+    
+    # Find closest match in the Elo database if exact match fails
+    closest_matches = difflib.get_close_matches(team_name, elo_dict.keys(), n=1, cutoff=0.4)
+    if closest_matches:
+        return elo_dict[closest_matches[0]]
+        
+    return 1500.0  # Fallback if absolutely no match is found
 
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
     BASE_AVG_SCORE = 28.0
     POINTS_PER_ELO = 25.0
 
-    r_home = elo_dict.get(home_team, 1500.0) + HOME_ADVANTAGE_ELO
-    r_away = elo_dict.get(away_team, 1500.0)
+    # FIXED: Using the fuzzy mapping function instead of direct .get()
+
+    r_home = get_closest_elo(home_team, elo_dict) + HOME_ADVANTAGE_ELO
+    r_away = get_closest_elo(away_team, elo_dict)
 
     projected_margin = (r_home - r_away) / POINTS_PER_ELO
     proj_home = max(0, BASE_AVG_SCORE + (projected_margin / 2))
