@@ -14,7 +14,8 @@ CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN
 # 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
 # =====================================================================
 @st.cache_data(ttl=86400)
-def train_cfb_elo_model(api_key):
+def train_cfb_elo_model
+(api_key):
     """Trains a math-based Elo system by processing past games chronologically."""
     elo_ratings = {}
     K_FACTOR = 35       
@@ -86,7 +87,7 @@ def fetch_live_market_spreads(api_key):
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
     
     for key in sport_keys:
-        url = f"https://api.the-odds-api.com/v4/sports/{key}/odds/"
+        url = f"https://the-odds-api.com{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
             response = requests.get(url, params=params)
@@ -102,7 +103,6 @@ def extract_fanduel_spread(game):
     if not bookmakers:
         return 0.0, "Opening Line / PK"
         
-    # Step A: Target FanDuel explicitly
     for bookmaker in bookmakers:
         if bookmaker.get("key", "").lower() == "fanduel":
             for market in bookmaker.get("markets", []):
@@ -111,7 +111,6 @@ def extract_fanduel_spread(game):
                         if outcome.get("name") == game["home_team"]:
                             return float(outcome["point"]), "FanDuel"
                             
-    # Step B: ✅ FIXED: Explicitly targeting index 0 of bookmakers list to prevent crashing
     first_book = bookmakers[0]
     for market in first_book.get("markets", []):
         if market.get("key") == "spreads":
@@ -149,7 +148,7 @@ def compile_betting_slate(games, elo_dict):
         elif edge < -1.5:
             lean = f"➡️ Value: {away_team} (+{abs(market_spread):.1f})"
         else:
-            lean = "❌ Pass"
+            lean = "❌ Pass / Fairly Priced"
             
         processed_slate.append({
             "Home Program": home_team,
@@ -183,9 +182,7 @@ else:
             
     all_teams = sorted(list(teams_set)) if teams_set else ["Georgia", "Alabama", "Ohio State", "Clemson"]
 
-    # =================================================================
-    # ✅ FIXED SECTION 1: SIDEBAR INTERACTIVE MATCHUP SIMULATOR W/ TEXT WRAPPING
-    # =================================================================
+    # SECTION 1: SIDEBAR INTERACTIVE MATCHUP SIMULATOR W/ TEXT WRAPPING
     st.sidebar.markdown("## 🧮 Section 1: Custom Matchup Simulator")
     st.sidebar.write("Select two teams to run a custom head-to-head score model simulation.")
     
@@ -196,7 +193,6 @@ else:
         s_home, s_away, s_prob = generate_score_projection(sim_home, sim_away, trained_elo_database)
         model_spread = s_away - s_home
         
-        # Using markdown blocks instead of rigid metric boxes ensures text wrapping is flawless
         st.sidebar.markdown("---")
         st.sidebar.markdown(f"#### 📊 Projection Results:")
         st.sidebar.markdown(f"**Score Prediction:**  \n`{sim_away} {s_away:.1f}` vs. `{sim_home} {s_home:.1f}`")
@@ -204,7 +200,7 @@ else:
         st.sidebar.markdown("---")
 
     # =================================================================
-    # SECTION 2: MAIN SLATE VISUAL MATRIX BOARD
+    # ✅ FIXED SECTION 2: REMOVED DROPDOWN & RENDERING FULL WEEK BOARD INSTANTLY
     # =================================================================
     st.markdown("## 📅 Section 2: All D1 Matches vs. Point Spread Board")
     st.markdown("This board updates automatically every week with fresh lines and newly calculated model metrics.")
@@ -213,10 +209,11 @@ else:
         df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
         
         if not df_slate.empty:
-            bet_filter = st.selectbox(
-                "Filter Board by Grade:",
-                ["Show All Games", "Show Best Bets Only (🔥)", "Show Value Leans Only (➡️)", "Hide Passes (❌)"]
-            )
+            search_query = st.text_input("🔍 Quick Search Board for a Team Name:", "").lower()
+            if search_query:
+                df_slate = df_slate[
+                    df_slate["Home Program"].str.lower().str.contains(search_query) | 
+                    df_slate["Away Program"].str.lower().str.contains(search_query)
+                ]
             
-            if bet_filter == "Show Best Bets Only (🔥)":
-                df_slate = df_slate[df_slate["Calculated Algorithmic Lean"].str.contains("Best Bet")]
+            # Displays 100% of matchups in a massive scrollable sheet directly
