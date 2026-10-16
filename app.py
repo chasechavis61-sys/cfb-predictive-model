@@ -22,8 +22,7 @@ def train_cfb_elo_model(api_key):
     
     headers = {"Authorization": f"Bearer {api_key}"}
     
-    # ✅ FIXED: Securely closed the square bracket to fix the line 216 syntax error
-
+    # ✅ FIXED: Securely populated and closed the training year parameters
     training_years = [2024, 2025, 2026]
     
     for year in training_years:
@@ -89,7 +88,7 @@ def fetch_live_market_spreads(api_key):
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
     
     for key in sport_keys:
-        url = f"https://the-odds-api.com{key}/odds/"
+        url = f"https://api.the-odds-api.com/v4/sports/{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
             response = requests.get(url, params=params)
@@ -100,7 +99,7 @@ def fetch_live_market_spreads(api_key):
     return combined_games
 
 def extract_fanduel_spread(game):
-    """Navigates lists accurately to grab FanDuel odds or alternative books."""
+    """Isolates FanDuel odds safely, falling back accurately to alternative sportsbooks."""
     bookmakers = game.get("bookmakers", [])
     if not bookmakers or len(bookmakers) == 0:
         return 0.0, "Opening Line / PK"
@@ -114,13 +113,13 @@ def extract_fanduel_spread(game):
                         if outcome.get("name") == game["home_team"]:
                             return float(outcome["point"]), "FanDuel"
                             
-    # Step B: Fallback indexing handles list dictionaries cleanly without causing crashes
+    # Step B: Safe fallback indexing to alternative available books
     first_book = bookmakers[0]
     for market in first_book.get("markets", []):
         if market.get("key") == "spreads":
             for outcome in market.get("outcomes", []):
                 if outcome.get("name") == game["home_team"]:
-                    return float(outcome["point"]), f"{first_book.get('title')} (FD Alternate)"
+                    return float(outcome["point"]), f"{first_book.get('title', 'Book')} (Alt)"
                     
     return 0.0, "Market Line"
 
@@ -143,7 +142,7 @@ def compile_betting_slate(games, elo_dict):
         model_home_margin = proj_away - proj_home  
         edge = market_spread - model_home_margin
         
-        # Grading the bets systematically based on point variations
+        # Grading bets systematically
         if edge > 3.5:
             lean = f"🔥 Best Bet: {home_team} ({market_spread:+.1f})"
         elif edge > 1.5:
@@ -176,16 +175,20 @@ st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
 if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
     st.error("🚨 Key Insertion Required: Please update lines 10 & 11 with your API credentials.")
 else:
-    # Run backend pipelines
+    # Run data tracking loops
     trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
     live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
     
-    # Establish complete program collection safely
-    all_teams = sorted(list(trained_elo_database.keys())) if trained_elo_database else ["Georgia", "Alabama", "Ohio State", "Clemson"]
+    # ✅ FIXED: Build robust team list gathering to capture every D1 school across both feeds
+    teams_set = set(trained_elo_database.keys())
+    if live_odds_feed:
+        for g in live_odds_feed:
+            teams_set.add(g["home_team"])
+            teams_set.add(g["away_team"])
+            
+    all_teams = sorted(list(teams_set)) if teams_set else ["Georgia", "Alabama", "Ohio State", "Clemson"]
 
-    # =================================================================
     # SECTION 1: SIDEBAR INTERACTIVE MATCHUP SIMULATOR
-    # =================================================================
     st.sidebar.markdown("## 🧮 Section 1: Custom Matchup Simulator")
     st.sidebar.write("Select any two teams to run a private head-to-head score model simulation.")
     
@@ -199,9 +202,7 @@ else:
         st.sidebar.metric("Projected Score Outcome", f"{sim_away} {s_away:.1f} - {sim_home} {s_home:.1f}")
         st.sidebar.metric("Model Implied Fair Line", f"{sim_home} {model_spread:+.1f}")
 
-    # =================================================================
     # SECTION 2: MAIN SLATE VISUAL MATRIX BOARD
-    # =================================================================
     st.markdown("## 📅 Section 2: All D1 Matches vs. Point Spread Board")
     st.markdown("This board updates automatically every week with fresh lines and newly calculated model metrics.")
     
@@ -209,7 +210,10 @@ else:
         df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
         
         if not df_slate.empty:
-            # Dropdown menu to easily toggle and look for high value options instantly
             bet_filter = st.selectbox(
                 "Filter Board by Grade:", 
-                ["Show All Games", "Show Best Bets Only (🔥)", "Show Value Leans Only (➡️)", "Hide Passes (❌)"])
+                ["Show All Games", "Show Best Bets Only (🔥)", "Show Value Leans Only (➡️)", "Hide Passes (❌)"]
+            )
+            
+            if bet_filter == "Show Best Bets Only (🔥)":
+                df_slate = df_slate[df_slate["Calculated Algorithmic Lean"].str.contains("Best Bet")]
