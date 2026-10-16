@@ -34,10 +34,10 @@ def train_cfb_elo_model(api_key):
                     if game.get('home_points') is None or game.get('away_points') is None:
                         continue
 
-                    home_team = game['home_team'']
-                    away_team = game['away_team'']
-                    home_score = int(game['home_points''])
-                    away_score = int(game['away_points''])
+                    home_team = game['home_team']
+                    away_team = game['away_team']
+                    home_score = int(game['home_points'])
+                    away_score = int(game['away_points'])
 
                     if home_team not in elo_ratings: elo_ratings[home_team] = 1500.0
                     if away_team not in elo_ratings: elo_ratings[away_team] = 1500.0
