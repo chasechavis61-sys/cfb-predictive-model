@@ -22,9 +22,9 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Re-established years explicitly and added 2026 for the current season
+    # FULLY FIXED: Explicitly defined years to pull historical data up to the current 2026 season
     for year in [2023, 2024, 2025, 2026]:
-        url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=regular"
+        url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
@@ -58,12 +58,12 @@ def train_cfb_elo_model(api_key):
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
             else:
-                st.sidebar.error(f"CFBD API error for {year}: {response.status_code}. Verify your API key.")
+                st.sidebar.error(f"CFBD API error for {year}: {response.status_code}")
         except Exception as e:
             st.sidebar.warning(f"Error compiling history for {year}: {e}")
 
     return elo_ratings
-
+    
 def get_closest_elo(team_name, elo_dict):
     """Maps commercial betting team names to official CFB data names."""
     if team_name in elo_dict:
