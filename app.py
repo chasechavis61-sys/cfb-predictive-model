@@ -212,4 +212,4 @@ else:
             # Dropdown menu to easily toggle and look for high value options instantly
             bet_filter = st.selectbox(
                 "Filter Board by Grade:", 
-                ["Show All Games", "Show Best Bets Only (🔥)", "Show Value Leans Only (➡️)", "Hide Passes (❌)"]
+                ["Show All Games", "Show Best Bets Only (🔥)", "Show Value Leans Only (➡️)", "Hide Passes (❌)"])
