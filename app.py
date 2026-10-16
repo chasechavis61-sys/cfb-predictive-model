@@ -19,11 +19,9 @@ def train_cfb_elo_model(api_key):
     K_FACTOR = 35       
     HOME_ADVANTAGE = 55 
     
-    headers = {"Authorization": f"Bearer {api_key}"}
-    
-    # Train over the last few regular seasons to establish accurate power metrics
-    for year in [2024, 2025, 2026]:
-        url = f"https://collegefootballdata.com{year}&seasonType=regular"
+  headers = {"Authorization": f"Bearer {api_key}"}
+    training_years = [2024, 2025, 2026]
+
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
