@@ -14,7 +14,7 @@ CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN
 # 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
 # =====================================================================
 @st.cache_data(ttl=86400)
-def train_cfb_elo_model
+def train_cfb_elo_model(
 (api_key):
     """Trains a math-based Elo system by processing past games chronologically."""
     elo_ratings = {}
