@@ -50,10 +50,6 @@ try:
                     shift = K_FACTOR * mov_multiplier * (actual_home - exp_home)
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
-    except Exception as e:
-            st.warning(f"Error compiling history for {year}: {e}")
-            
-    return elo_ratings
 
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
