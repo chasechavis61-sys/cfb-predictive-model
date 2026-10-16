@@ -112,10 +112,18 @@ def fetch_live_market_spreads(api_key):
     return combined_games
 
 # =====================================================================
-# 4. EDGE MATRIX COMPILATION ENGINE
+# 4. EDGE MATRIX COMPILATION ENGINE (WITH DIAGNOSTICS)
 # =====================================================================
 def compile_betting_slate(games, elo_dict):
     processed_slate = []
+
+    # --- DIAGNOSTIC CORNER ---
+    st.write(f"📊 **Debug Info:** Your Elo database has **{len(elo_dict)}** teams stored.")
+    if len(elo_dict) > 0:
+        st.write(f"Sample teams in database: {list(elo_dict.keys())[:5]}")
+    else:
+        st.error("❌ CRITICAL: Your Elo database is completely empty! The historical API calls are failing.")
+    # --------------------------
 
     for game in games:
         home_team = game["home_team"]
@@ -124,6 +132,7 @@ def compile_betting_slate(games, elo_dict):
         market_spread = None
         bookmaker_used = "Consensus"
 
+        # Safe extraction for Odds API structure
         if game.get("bookmakers") and len(game["bookmakers"]) > 0:
             primary_book = game["bookmakers"][0]
             bookmaker_used = primary_book.get("title", "Unknown")
