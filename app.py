@@ -1,8 +1,3 @@
-
-(no subject)
-Chase Chavis <chase.chavis61@gmail.com>	Fri, Oct 16, 2026 at 1:18 PM
-To: Chase Chavis <chase.chavis61@gmail.com>
-python
 import streamlit as st
 import requests
 import pandas as pd
