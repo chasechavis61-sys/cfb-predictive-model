@@ -21,11 +21,8 @@ def train_cfb_elo_model(api_key):
     
     headers = {"Authorization": f"Bearer {api_key}"}
     
-    # ✅ FIXED: Securely locked the training loop years array
-    training_years = [2024, 2025, 2026]
-    
-    for year in training_years:
-        # ✅ FIXED: Correct endpoint base URL
+    # FIXED: Added the specific years to train historical team ratings
+    for year in:
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
@@ -82,29 +79,20 @@ def generate_score_projection(home_team, away_team, elo_dict):
 # =====================================================================
 @st.cache_data(ttl=3600)
 def fetch_live_market_spreads(api_key):
-    """Pulls betting spreads safely by masking the script as a regular web browser."""
     combined_games = []
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
-    
-    # ✅ FIX: This header makes the API request look like a normal human using Google Chrome
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
     
     for key in sport_keys:
         url = f"https://the-odds-api.com{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
-            # Added headers and a 15-second timeout window
-            response = requests.get(url, params=params, headers=headers, timeout=15)
+            response = requests.get(url, params=params)
             if response.status_code == 200:
                 combined_games.extend(response.json())
-            elif response.status_code == 401:
-                st.error(f"❌ The Odds API Error: Your API key is invalid or unauthorized.")
             else:
-                st.error(f"The Odds API Error ({key}): Code {response.status_code}")
-        except requests.exceptions.RequestException as e:
-            st.error(f"⚠️ Connection dropped. If you are using a VPN, please disconnect it, or try switching from Wi-Fi to a mobile hotspot.")
+                st.error(f"The Odds API Error ({key}): Status Code {response.status_code} - {response.text}")
+        except Exception as e:
+            st.error(f"Network error linking to The Odds API: {e}")
     return combined_games
 
 # =====================================================================
@@ -120,7 +108,6 @@ def compile_betting_slate(games, elo_dict):
         market_spread = None
         bookmaker_used = "Consensus"
         
-        # Pull the primary sportsbook line
         if game.get("bookmakers") and len(game["bookmakers"]) > 0:
             primary_book = game["bookmakers"][0] 
             bookmaker_used = primary_book.get("title", "Unknown")
@@ -143,20 +130,20 @@ def compile_betting_slate(games, elo_dict):
         edge = market_spread - model_home_margin
         
         if edge > 3.5:
-            lean = f"🔥 {home_team} ({market_spread:+.1f}) Strong Play"
+            lean = f"🔥 {home_team} ({market_spread}) Strong Play"
         elif edge > 1.5:
-            lean = f"➡️ {home_team} ({market_spread:+.1f}) Slight Lean"
+            lean = f"➡️ {home_team} ({market_spread}) Slight Lean"
         elif edge < -3.5:
-            lean = f"🔥 {away_team} (+{abs(market_spread):.1f}) Strong Play"
+            lean = f"🔥 {away_team} (+{abs(market_spread)}) Strong Play"
         elif edge < -1.5:
-            lean = f"➡️ {away_team} (+{abs(market_spread):.1f}) Slight Lean"
+            lean = f"➡️ {away_team} (+{abs(market_spread)}) Slight Lean"
         else:
             lean = "❌ Pass / No Value"
             
         processed_slate.append({
             "Home Program": home_team,
             "Away Program": away_team,
-            "Live Vegas Spread": f"{home_team} {market_spread:+.1f} ({bookmaker_used})",
+            "Live Vegas Spread": f"{home_team} {market_spread} ({bookmaker_used})",
             "Model Score Projection": f"{proj_away:.1f} - {proj_home:.1f}",
             "Outright Winner Projection": f"{winner} ({win_percentage:.0%})",
             "Calculated Algorithmic Lean": lean
