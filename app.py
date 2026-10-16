@@ -7,8 +7,8 @@ import numpy as np
 # 1. API CONFIGURATION
 # =====================================================================
 # 🛑 PASTE YOUR ACTIVE API KEYS HERE:
-THE_ODDS_API_KEY = "YOUR_THE_ODDS_API_KEY_HERE"
-CFBD_API_KEY = "YOUR_CFBD_API_KEY_HERE"
+THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
+CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
 # =====================================================================
 # 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
