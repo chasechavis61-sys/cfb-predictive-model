@@ -17,8 +17,7 @@ CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN
 def train_cfb_elo_model(api_key):
     elo_ratings = {}
     K_FACTOR = 35       
-    HOME_ADVANTAGE
- = 55 
+    HOME_ADVANTAGE = 55 
     
     headers = {"Authorization": f"Bearer {api_key}"}
     
