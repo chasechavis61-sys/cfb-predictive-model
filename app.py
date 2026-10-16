@@ -194,8 +194,8 @@ else:
     st.sidebar.markdown("## 🧮 Section 1: Custom Matchup Simulator")
     st.sidebar.write("Select two teams to run a custom head-to-head score model simulation.")
     
-    sim_home = st.sidebar.selectbox("Home Team", all_teams, index=all_teams.index("Georgia") if "Georgia" in all_teams else 0)
-    sim_away = st.sidebar.selectbox("Away Team", all_teams, index=all_teams.index("Alabama") if "Alabama" in all_teams else 1)
+    sim_home = st.sidebar.selectbox("Home Team", index=all_teams.index("Georgia") if "Georgia" in all_teams else 0)
+    sim_away = st.sidebar.selectbox("Away Team", index=all_teams.index("Alabama") if "Alabama" in all_teams else 1)
     
     if sim_home and sim_away:
         s_home, s_away, s_prob = generate_score_projection(sim_home, sim_away, trained_elo_database)
