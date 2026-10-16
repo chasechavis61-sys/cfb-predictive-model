@@ -149,9 +149,8 @@ def compile_betting_slate(games, elo_dict):
             "Outright Winner Projection": f"{winner} ({win_percentage:.0%})",
             "Calculated Algorithmic Lean": lean
         })
-        
     
-return pd.DataFrame(processed_slate)
+    return pd.DataFrame(processed_slate)
 
 # =====================================================================
 # 5. STREAMLIT VISUAL FRONTEND UI
