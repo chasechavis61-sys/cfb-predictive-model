@@ -7,9 +7,12 @@ import difflib
 # =====================================================================
 # 1. API CONFIGURATION
 # =====================================================================
-#  PASTE YOUR ACTIVE API KEYS HERE:
 THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
 CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
+
+# =====================================================================
+# 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
+# =====================================================================
 
 @st.cache_data(ttl=86400)
 def train_cfb_elo_model(api_key):
@@ -19,7 +22,7 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Using a range function to pull 2023, 2024, 2025, and 2026 securely
+    # Pulls data up to the current 2026 season dynamically
     for year in range(2023, 2027):
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
@@ -54,132 +57,61 @@ def train_cfb_elo_model(api_key):
                     shift = K_FACTOR * mov_multiplier * (actual_home - exp_home)
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
-            else:
-                st.sidebar.error(
-f"CFBD API error for {year}: Status {response.status_code}")
         except Exception as e:
             st.sidebar.warning(f"Error compiling history for {year}: {e}")
 
     return elo_ratings
 
 def get_closest_elo(team_name, elo_dict):
-    """
-    Directly translates commercial betting names (The Odds API)
-    to official statistical names (CFBD API) to guarantee unique projections.
-    """
+    """Translates commercial betting names to match official statistical databases."""
     if not team_name:
         return 1500.0
 
-    # 1. Manual Translation Map for major structural differences
     translation_map = {
-        # SEC
-        "Mississippi Rebels": "Ole Miss",
-        "Mississippi St Bulldogs": "Mississippi State",
-        "Texas A&M Aggies": "Texas A&M",
-        "LSU Tigers": "LSU",
-        "Alabama Crimson Tide": "Alabama",
-        "Georgia Bulldogs": "Georgia",
-        "Texas Longhorns": "Texas",
-        "Tennessee Volunteers": "Tennessee",
-        "Missouri Tigers": "Missouri",
-        "Oklahoma Sooners": "Oklahoma",
-        "Kentucky Wildcats": "Kentucky",
-        "Auburn Tigers": "Auburn",
-        "Florida Gators": "Florida",
-        "South Carolina Gamecocks": "South Carolina",
-        "Arkansas Razorbacks": "Arkansas",
-        "Vanderbilt Commodores": "Vanderbilt",
-        
-        # Big Ten
-        "Ohio State Buckeyes": "Ohio State",
-        "Oregon Ducks": "Oregon",
-        "Penn State Nittany Lions": "Penn State",
-        "Michigan Wolverines": "Michigan",
-        "USC Trojans": "USC",
-        "Southern California Trojans": "USC",
-        "Washington Huskies": "Washington",
-        "Iowa Hawkeyes": "Iowa",
-        "Wisconsin Badgers": "Wisconsin",
-        "Nebraska Cornhuskers": "Nebraska",
-        "Maryland Terrapins": "Maryland",
-        "Minnesota Golden Gophers": "Minnesota",
-        "Rutgers Scarlet Knights": "Rutgers",
-        "Northwestern Wildcats": "Northwestern",
-        "Illinois Fighting Illini": "Illinois",
-        "Michigan State Spartans": "Michigan State",
-        "UCLA Bruins": "UCLA",
-        "Indiana Hoosiers": "Indiana",
-        "Purdue Boilermakers": "Purdue",
-        
-        # Big 12
-        "Utah Utes": "Utah",
-        "Kansas State Wildcats": "Kansas State",
-        "Oklahoma State Cowboys": "Oklahoma State",
-        "Arizona Wildcats": "Arizona",
-        "Kansas Jayhawks": "Kansas",
-        "Iowa State Cyclones": "Iowa State",
-        "West Virginia Mountaineers": "West Virginia",
-        "TCU Horned Frogs": "TCU",
-        "Texas Tech Red Raiders": "Texas Tech",
-        "UCF Knights": "UCF",
-        "BYU Cougars": "BYU",
-        "Colorado Buffaloes": "Colorado",
-        "Baylor Bears": "Baylor",
-        "Houston Cougars": "Houston",
-        "Arizona State Sun Devils": "Arizona State",
-        "Cincinnati Bearcats": "Cincinnati",
-        
-        # ACC
-        "Florida State Seminoles": "Florida State",
-        "Clemson Tigers": "Clemson",
-        "Miami Hurricanes": "Miami",
-        "Louisville Cardinals": "Louisville",
-        "NC State Wolfpack": "NC State",
-        "SMU Mustangs": "SMU",
-        "Virginia Tech Hokies": "Virginia Tech",
-        "North Carolina Tar Heels": "North Carolina",
-        "Georgia Tech Yellow Jackets": "Georgia Tech",
-        "California Golden Bears": "California",
-        "Duke Blue Devils": "Duke",
-        "Syracuse Orange": "Syracuse",
-        "Pittsburgh Panthers": "Pittsburgh",
-        "Boston College Eagles": "Boston College",
-        "Wake Forest Demon Deacons": "Wake Forest",
-        "Virginia Cavaliers": "Virginia",
-        "Stanford Cardinal": "Stanford",
-        
-        # Independents / Noteworthy Others
-        "Notre Dame Fighting Irish": "Notre Dame",
-        "Boise State Broncos": "Boise State",
-        "Liberty Flames": "Liberty",
-        "James Madison Dukes": "James Madison",
-        "Memphis Tigers": "Memphis",
-        "Tulane Green Wave": "Tulane",
-        "UNLV Rebels": "UNLV"
+        "Mississippi Rebels": "Ole Miss", "Mississippi St Bulldogs": "Mississippi State",
+        "Texas A&M Aggies": "Texas A&M", "LSU Tigers": "LSU", "Alabama Crimson Tide": "Alabama",
+        "Georgia Bulldogs": "Georgia", "Texas Longhorns": "Texas", "Tennessee Volunteers": "Tennessee",
+        "Missouri Tigers": "Missouri", "Oklahoma Sooners": "Oklahoma", "Kentucky Wildcats": "Kentucky",
+        "Auburn Tigers": "Auburn", "Florida Gators": "Florida", "South Carolina Gamecocks": "South Carolina",
+        "Arkansas Razorbacks": "Arkansas", "Vanderbilt Commodores": "Vanderbilt",
+        "Ohio State Buckeyes": "Ohio State", "Oregon Ducks": "Oregon", "Penn State Nittany Lions": "Penn State",
+        "Michigan Wolverines": "Michigan", "USC Trojans": "USC", "Southern California Trojans": "USC",
+        "Washington Huskies": "Washington", "Iowa Hawkeyes": "Iowa", "Wisconsin Badgers": "Wisconsin",
+        "Nebraska Cornhuskers": "Nebraska", "Maryland Terrapins": "Maryland", "Minnesota Golden Gophers": "Minnesota",
+        "Rutgers Scarlet Knights": "Rutgers", "Northwestern Wildcats": "Northwestern", "Illinois Fighting Illini": "Illinois",
+        "Michigan State Spartans": "Michigan State", "UCLA Bruins": "UCLA", "Indiana Hoosiers": "Indiana", "Purdue Boilermakers": "Purdue",
+        "Utah Utes": "Utah", "Kansas State Wildcats": "Kansas State", "Oklahoma State Cowboys": "Oklahoma State",
+        "Arizona Wildcats": "Arizona", "Kansas Jayhawks": "Kansas", "Iowa State Cyclones": "Iowa State",
+        "West Virginia Mountaineers": "West Virginia", "TCU Horned Frogs": "TCU", "Texas Tech Red Raiders": "Texas Tech",
+        "UCF Knights": "UCF", "BYU Cougars": "BYU", "Colorado Buffaloes": "Colorado", "Baylor Bears": "Baylor",
+        "Houston Cougars": "Houston", "Arizona State Sun Devils": "Arizona State", "Cincinnati Bearcats": "Cincinnati",
+        "Florida State Seminoles": "Florida State", "Clemson Tigers": "Clemson", "Miami Hurricanes": "Miami",
+        "Louisville Cardinals": "Louisville", "NC State Wolfpack": "NC State", "SMU Mustangs": "SMU",
+        "Virginia Tech Hokies": "Virginia Tech", "North Carolina Tar Heels": "North Carolina", "Georgia Tech Yellow Jackets": "Georgia Tech",
+        "California Golden Bears": "California", "Duke Blue Devils": "Duke", "Syracuse Orange": "Syracuse",
+        "Pittsburgh Panthers": "Pittsburgh", "Boston College Eagles": "Boston College", "Wake Forest Demon Deacons": "Wake Forest",
+        "Virginia Cavaliers": "Virginia", "Stanford Cardinal": "Stanford", "Notre Dame Fighting Irish": "Notre Dame",
+        "Boise State Broncos": "Boise State", "Liberty Flames": "Liberty", "James Madison Dukes": "James Madison",
+        "Memphis Tigers": "Memphis", "Tulane Green Wave": "Tulane", "UNLV Rebels": "UNLV"
     }
 
-    # 2. Check the manual map first
     if team_name in translation_map:
-        target_name = translation_map[team_name]
-        return elo_dict.get(target_name, 1500.0)
-
-    # 3. Check for exact match in case the API provides the short name
+        return elo_dict.get(translation_map[team_name], 1500.0)
     if team_name in elo_dict:
         return elo_dict[team_name]
 
-    # 4. Strip common mascots as a dynamic safety fallback (FIXED VARIABLE BUG HERE)
+    # Clean up standard suffix formatting gaps
     clean_name = team_name
-    mascots = ["Buckeyes", "Trojans", "Rebels", "Tigers", "Bulldogs", "Crimson Tide", "Longhorns", "Volunteers", "Sooners"]
+    mascots = ["Buckeyes", "Trojans", "Rebels", "Tigers", "Bulldogs", "Crimson Tide", "Longhorns", "Volunteers", "Sooners", "Gators", "Wildcats", "Razorbacks", "Wolverines", "Ducks", "Huskies", "Hawkeyes", "Badgers"]
     for mascot in mascots:
         clean_name = clean_name.replace(mascot, "").strip()
 
     if clean_name in elo_dict:
         return elo_dict[clean_name]
 
-    # 5. Fuzzy matching fallback with list formatting correction
     closest_matches = difflib.get_close_matches(team_name, list(elo_dict.keys()), n=1, cutoff=0.25)
     if closest_matches:
-        return elo_dict[closest_matches[0]]
+        return elo_dict.get(closest_matches[0], 1500.0)
 
     return 1500.0
 
@@ -197,30 +129,28 @@ def generate_score_projection(home_team, away_team, elo_dict):
 
     win_prob = 1 / (1 + 10 ** ((r_away - r_home) / 400))
     return proj_home, proj_away, win_prob
-    
+
 # =====================================================================
 # 3. LIVE MARKET SYNCHRONIZATION PIPELINE
 # =====================================================================
 @st.cache_data(ttl=3600)
 def fetch_live_market_spreads(api_key):
     combined_games = []
-    sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
+    sport_keys = ["americanfootball_ncaaf"]
 
     for key in sport_keys:
-        url = f"https://api.the-odds-api.com/v4/sports/{key}/odds/"
+        url = f"https://the-odds-api.com{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
             response = requests.get(url, params=params)
             if response.status_code == 200:
                 combined_games.extend(response.json())
-            else:
-                st.error(f"The Odds API Error ({key}): Status Code {response.status_code} - {response.text}")
         except Exception as e:
             st.error(f"Network error linking to The Odds API: {e}")
     return combined_games
 
 # =====================================================================
-# 4. EDGE MATRIX COMPILATION ENGINE (FIXED BOTH OUTCOMES)
+# 4. EDGE MATRIX COMPILATION ENGINE
 # =====================================================================
 def compile_betting_slate(games, elo_dict):
     processed_slate = []
@@ -235,30 +165,26 @@ def compile_betting_slate(games, elo_dict):
         market_spread = None
         bookmaker_used = "Consensus"
 
-        # Safe extraction of the point spread matrix from the JSON structure
         bookmakers = game.get("bookmakers", [])
         if bookmakers and len(bookmakers) > 0:
             primary_book = bookmakers[0]
             bookmaker_used = primary_book.get("title", "Unknown")
 
             markets = primary_book.get("markets", [])
-            if markets and len(markets) > 0:
-                spread_market = next((m for m in markets if m.get("key") == "spreads"), markets[0])
+            spread_market = next((m for m in markets if m.get("key") == "spreads"), None)
+            
+            if spread_market:
                 outcomes = spread_market.get("outcomes", [])
-                
-                # FIXED: Extracting the layout relative to the home team's spread line safely
                 for outcome in outcomes:
                     if outcome.get("name") == home_team:
                         market_spread = float(outcome.get("point", 0.0))
 
-        # Default fallback spread to ensure processing continues smoothly if vegas lines are lock-tight
         if market_spread is None:
             market_spread = 0.0
+            bookmaker_used = "No Live Line"
 
-        # Run calculations using our specific team values
         proj_home, proj_away, home_prob = generate_score_projection(home_team, away_team, elo_dict)
         
-        # FIXED: Explicitly evaluating winner status using separate float distributions
         if proj_home > proj_away:
             winner = home_team
             win_percentage = home_prob
@@ -266,7 +192,6 @@ def compile_betting_slate(games, elo_dict):
             winner = away_team
             win_percentage = 1.0 - home_prob
 
-        # Calculate exact spread differences against Vegas
         model_home_margin = proj_away - proj_home
         edge = market_spread - model_home_margin
 
@@ -284,47 +209,3 @@ def compile_betting_slate(games, elo_dict):
         processed_slate.append({
             "Home Program": home_team,
             "Away Program": away_team,
-            "Live Vegas Spread": f"{home_team} {market_spread} ({bookmaker_used})",
-            "Model Score Projection": f"{proj_away:.1f} - {proj_home:.1f}",
-            "Outright Winner Projection": f"{winner} ({win_percentage:.0%})",
-            "Calculated Algorithmic Lean": lean
-        })
-
-    return pd.DataFrame(processed_slate)
-
-# =====================================================================
-# 5. STREAMLIT VISUAL FRONTEND UI
-# =====================================================================
-st.set_page_config(page_title="All-D1 Predictive Matrix", layout="wide")
-
-st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
-st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
-
-if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
-    st.error("ģ Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
-else:
-    status_box = st.info("Step 1: Running Elo calculations across thousands of historical D1 matches...")
-    trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
-
-    status_box.info(
-"Step 2: Connecting to sportsbooks to collect live games and spreads...")
-    live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
-
-    status_box.empty()
-
-    if live_odds_feed:
-        df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
-
-        if not df_slate.empty:
-            search_query = st.text_input("ģ Search for a team:", "").lower()
-            if search_query:
-                df_slate = df_slate[
-                    df_slate["Home Program"].str.lower().str.contains(search_query) |
-                    df_slate["Away Program"].str.lower().str.contains(search_query)
-                ]
-            st.dataframe(df_slate, use_container_width=True, hide_index=True)
-        else:
-            st.warning("ģ  Connected successfully, but no games with active point spread markets are open right now.")
-    else:
-        st.error("ģ Failed to download any upcoming odds. Check the error notifications above for structural details.")
-
