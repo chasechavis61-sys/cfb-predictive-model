@@ -7,7 +7,7 @@ import numpy as np
 # 1. API CONFIGURATION
 # =====================================================================
 # 🛑 PASTE YOUR ACTIVE API KEYS HERE:
-THE_ODDS_API_KEY = "9f63d86181a8c860651a4422186391b3"
+THE_ODDS_API_KEY = "9a52f971f3908bdbe2137ce63a0ad559"
 CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
 # =====================================================================
