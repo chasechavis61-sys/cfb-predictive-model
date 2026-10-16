@@ -63,28 +63,125 @@ f"CFBD API error for {year}: Status {response.status_code}")
     return elo_ratings
 
 def get_closest_elo(team_name, elo_dict):
-    """Maps mismatched team names from betting feeds to historical tracking data."""
+    """
+    Directly translates commercial betting names (The Odds API)
+    to official statistical names (CFBD API) to guarantee unique projections.
+    """
     if not team_name:
         return 1500.0
+
+    # 1. Manual Translation Map for major structural differences
+    translation_map = {
+        # SEC
+        "Mississippi Rebels": "Ole Miss",
+        "Mississippi St Bulldogs": "Mississippi State",
+        "Texas A&M Aggies": "Texas A&M",
+        "LSU Tigers": "LSU",
+        "Alabama Crimson Tide": "Alabama",
+        "Georgia Bulldogs": "Georgia",
+        "Texas Longhorns": "Texas",
+        "Tennessee Volunteers": "Tennessee",
+        "Missouri Tigers": "Missouri",
+        "Oklahoma Sooners": "Oklahoma",
+        "Kentucky Wildcats": "Kentucky",
+        "Auburn Tigers": "Auburn",
+        "Florida Gators": "Florida",
+        "South Carolina Gamecocks": "South Carolina",
+        "Arkansas Razorbacks": "Arkansas",
+        "Vanderbilt Commodores": "Vanderbilt",
         
-    # Standardize string formatting
-    team_clean = str(team_name).strip()
-    
-    if team_clean in elo_dict:
-        return elo_dict[team_clean]
-    
-    # Try exact match ignoring case
-    for k, v in elo_dict.items():
-        if k.lower() == team_clean.lower():
-            return v
-            
-    # Fallback to pure fuzzy matching using a soft 30% cutoff to bridge mascot gaps
-    closest_matches = difflib.get_close_matches(team_clean, list(elo_dict.keys()), n=1, cutoff=0.3)
+        # Big Ten
+        "Ohio State Buckeyes": "Ohio State",
+        "Oregon Ducks": "Oregon",
+        "Penn State Nittany Lions": "Penn State",
+        "Michigan Wolverines": "Michigan",
+        "USC Trojans": "USC",
+        "Southern California Trojans": "USC",
+        "Washington Huskies": "Washington",
+        "Iowa Hawkeyes": "Iowa",
+        "Wisconsin Badgers": "Wisconsin",
+        "Nebraska Cornhuskers": "Nebraska",
+        "Maryland Terrapins": "Maryland",
+        "Minnesota Golden Gophers": "Minnesota",
+        "Rutgers Scarlet Knights": "Rutgers",
+        "Northwestern Wildcats": "Northwestern",
+        "Illinois Fighting Illini": "Illinois",
+        "Michigan State Spartans": "Michigan State",
+        "UCLA Bruins": "UCLA",
+        "Indiana Hoosiers": "Indiana",
+        "Purdue Boilermakers": "Purdue",
+        
+        # Big 12
+        "Utah Utes": "Utah",
+        "Kansas State Wildcats": "Kansas State",
+        "Oklahoma State Cowboys": "Oklahoma State",
+        "Arizona Wildcats": "Arizona",
+        "Kansas Jayhawks": "Kansas",
+        "Iowa State Cyclones": "Iowa State",
+        "West Virginia Mountaineers": "West Virginia",
+        "TCU Horned Frogs": "TCU",
+        "Texas Tech Red Raiders": "Texas Tech",
+        "UCF Knights": "UCF",
+        "BYU Cougars": "BYU",
+        "Colorado Buffaloes": "Colorado",
+        "Baylor Bears": "Baylor",
+        "Houston Cougars": "Houston",
+        "Arizona State Sun Devils": "Arizona State",
+        "Cincinnati Bearcats": "Cincinnati",
+        
+        # ACC
+        "Florida State Seminoles": "Florida State",
+        "Clemson Tigers": "Clemson",
+        "Miami Hurricanes": "Miami",
+        "Louisville Cardinals": "Louisville",
+        "NC State Wolfpack": "NC State",
+        "SMU Mustangs": "SMU",
+        "Virginia Tech Hokies": "Virginia Tech",
+        "North Carolina Tar Heels": "North Carolina",
+        "Georgia Tech Yellow Jackets": "Georgia Tech",
+        "California Golden Bears": "California",
+        "Duke Blue Devils": "Duke",
+        "Syracuse Orange": "Syracuse",
+        "Pittsburgh Panthers": "Pittsburgh",
+        "Boston College Eagles": "Boston College",
+        "Wake Forest Demon Deacons": "Wake Forest",
+        "Virginia Cavaliers": "Virginia",
+        "Stanford Cardinal": "Stanford",
+        
+        # Independents / Noteworthy Others
+        "Notre Dame Fighting Irish": "Notre Dame",
+        "Boise State Broncos": "Boise State",
+        "Liberty Flames": "Liberty",
+        "James Madison Dukes": "James Madison",
+        "Memphis Tigers": "Memphis",
+        "Tulane Green Wave": "Tulane",
+        "UNLV Rebels": "UNLV"
+    }
+
+    # 2. Check the manual map first
+    if team_name in translation_map:
+        target_name = translation_map[team_name]
+        return elo_dict.get(target_name, 1500.0)
+
+    # 3. Check for exact match in case the API provides the short name
+    if team_name in elo_dict:
+        return elo_dict[team_name]
+
+    # 4. Strip common mascots as a dynamic safety fallback
+    clean_name = team_name
+    mascots = ["Buckeyes", "Trojans", "Rebels", "Tigers", "Bulldogs", "Crimson Tide", "Longhorns", "Volunteers", "Sooners"]
+    for mascot in mascots:
+        clean_name = clean_name.replace(mascots, "").strip()
+
+    if clean_name in elo_dict:
+        return elo_dict[clean_name]
+
+    # 5. Fuzzy matching fallback with list formatting correction
+    closest_matches = difflib.get_close_matches(team_name, list(elo_dict.keys()), n=1, cutoff=0.25)
     if closest_matches:
-        matched_team = closest_matches[0] # Grab the actual string item from the match list
-        return elo_dict[matched_team]
-        
-    return 1500.0  # Fallback baseline if absolutely no match if found
+        return elo_dict[closest_matches]
+
+    return 1500.0
 
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
