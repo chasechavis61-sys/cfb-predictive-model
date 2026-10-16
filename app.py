@@ -22,13 +22,15 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Added the specific years to train historical team ratings
-    for year in [2023, 2024, 2025]:
+    # FIXED: Re-established years explicitly and added 2026 for the current season
+    for year in [2023, 2024, 2025, 2026]:
         url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
             if response.status_code == 200:
                 games = response.json()
+                if not games:
+                    continue
                 games = sorted(games, key=lambda x: x.get('week', 0))
 
                 for game in games:
@@ -55,8 +57,10 @@ def train_cfb_elo_model(api_key):
                     shift = K_FACTOR * mov_multiplier * (actual_home - exp_home)
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
+            else:
+                st.sidebar.error(f"CFBD API error for {year}: {response.status_code}. Verify your API key.")
         except Exception as e:
-            st.warning(f"Error compiling history for {year}: {e}")
+            st.sidebar.warning(f"Error compiling history for {year}: {e}")
 
     return elo_ratings
 
