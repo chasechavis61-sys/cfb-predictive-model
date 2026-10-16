@@ -22,7 +22,7 @@ def train_cfb_elo_model(api_key):
     headers = {"Authorization": f"Bearer {api_key}"}
     
     # ✅ FIXED: Securely locked the training loop years array
-    training_years = [2024, 2025, 2026]
+    training_years = [2025]
     
     for year in training_years:
         # ✅ FIXED: Correct endpoint base URL
