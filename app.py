@@ -43,7 +43,6 @@ def generate_score_projection(home_team, away_team, elo_dict):
 
     win_prob = 1 / (1 + 10 ** ((r_away - r_home) / 400))
     return proj_home, proj_away, win_prob
-
 # =====================================================================
 # 3. LIVE MARKET SYNCHRONIZATION PIPELINE
 # =====================================================================
@@ -133,7 +132,7 @@ if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFB
     st.error("ģ Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
 else:
     status_box = st.info("Step 1: Running Elo calculations across thousands of historical D1 matches...")
-    trained_elo_database = (CFBD_API_KEY)
+    trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
 
     status_box.info(
 "Step 2: Connecting to sportsbooks to collect live games and spreads...")
