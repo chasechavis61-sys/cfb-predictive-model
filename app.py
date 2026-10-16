@@ -11,9 +11,6 @@ import difflib
 THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
 CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
-# =====================================================================
-# 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE (FULLY REPAIRED)
-# =====================================================================
 @st.cache_data(ttl=86400)
 def train_cfb_elo_model(api_key):
     elo_ratings = {}
