@@ -82,21 +82,24 @@ def generate_score_projection(home_team, away_team, elo_dict):
 # =====================================================================
 @st.cache_data(ttl=3600)
 def fetch_live_market_spreads(api_key):
+    """Pulls betting spreads safely with connection timeouts to prevent network locks."""
     combined_games = []
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
     
     for key in sport_keys:
-        # ✅ FIXED: Correct base URL for the odds API endpoint
         url = f"https://the-odds-api.com{key}/odds/"
+        # Added a 10-second connection timeout window
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
-            response = requests.get(url, params=params)
+            response = requests.get(url, params=params, timeout=10)
             if response.status_code == 200:
                 combined_games.extend(response.json())
             else:
-                st.error(f"The Odds API Error ({key}): Status Code {response.status_code} - {response.text}")
+                st.error(f"The Odds API Error ({key}): Code {response.status_code}")
+        except requests.exceptions.ConnectionError:
+            st.error(f"⚠️ Network block detected on {key}. Your firewall, VPN, or router is blocking the connection to the server.")
         except Exception as e:
-            st.error(f"Network error linking to The Odds API: {e}")
+            pass
     return combined_games
 
 # =====================================================================
