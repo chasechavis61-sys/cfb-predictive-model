@@ -167,11 +167,11 @@ def get_closest_elo(team_name, elo_dict):
     if team_name in elo_dict:
         return elo_dict[team_name]
 
-    # 4. Strip common mascots as a dynamic safety fallback
+    # 4. Strip common mascots as a dynamic safety fallback (FIXED VARIABLE BUG HERE)
     clean_name = team_name
     mascots = ["Buckeyes", "Trojans", "Rebels", "Tigers", "Bulldogs", "Crimson Tide", "Longhorns", "Volunteers", "Sooners"]
     for mascot in mascots:
-        clean_name = clean_name.replace(mascots, "").strip()
+        clean_name = clean_name.replace(mascot, "").strip()
 
     if clean_name in elo_dict:
         return elo_dict[clean_name]
@@ -179,7 +179,7 @@ def get_closest_elo(team_name, elo_dict):
     # 5. Fuzzy matching fallback with list formatting correction
     closest_matches = difflib.get_close_matches(team_name, list(elo_dict.keys()), n=1, cutoff=0.25)
     if closest_matches:
-        return elo_dict[closest_matches]
+        return elo_dict[closest_matches[0]]
 
     return 1500.0
 
