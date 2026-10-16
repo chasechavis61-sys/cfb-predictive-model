@@ -184,5 +184,4 @@ else:
         else:
             st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now.")
     else:
-        st.error("❌ Failed to download any upcoming odds. Check the error notifications above for structural details.
-")
+        st.error("❌ Failed to download any upcoming odds. Check the error notifications above for structural details.")
