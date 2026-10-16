@@ -22,8 +22,8 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: The explicit list of years is now completely restored
-    for year in:
+    # FIXED: Replaced 'for year in:' with a valid iterable range of years
+    for year in range(2020, 2027):
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
@@ -68,12 +68,12 @@ def get_closest_elo(team_name, elo_dict):
     """Maps mismatched team names from betting feeds to historical tracking data."""
     if team_name in elo_dict:
         return elo_dict[team_name]
-    
+
     # Fuzzy match using a 40% similarity threshold to bridge mascot differences
     closest_matches = difflib.get_close_matches(team_name, list(elo_dict.keys()), n=1, cutoff=0.4)
     if closest_matches:
         return elo_dict[closest_matches[0]]
-        
+
     return 1500.0  # Fallback
 
 def generate_score_projection(home_team, away_team, elo_dict):
@@ -90,7 +90,7 @@ def generate_score_projection(home_team, away_team, elo_dict):
 
     win_prob = 1 / (1 + 10 ** ((r_away - r_home) / 400))
     return proj_home, proj_away, win_prob
-
+    
 # =====================================================================
 # 3. LIVE MARKET SYNCHRONIZATION PIPELINE
 # =====================================================================
