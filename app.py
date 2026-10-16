@@ -7,13 +7,58 @@ import difflib
 # =====================================================================
 # 1. API CONFIGURATION
 # =====================================================================
-#  PASTE YOUR ACTIVE API KEYS HERE:
 THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
 CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
 # =====================================================================
-# 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE (ADJUSTED)
+# 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
 # =====================================================================
+@st.cache_data(ttl=86400)
+def train_cfb_elo_model(api_key):
+    elo_ratings = {}
+    K_FACTOR = 35
+    HOME_ADVANTAGE = 55
+
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    # FIXED: Restored the complete list and added 2026 for the current season
+    for year in:
+        url = f"https://collegefootballdata.com{year}&seasonType=regular"
+        try:
+            
+response = requests.get(url, headers=headers)
+            if response.status_code == 200:
+                games = response.json()
+                games = sorted(games, key=lambda x: x.get('week', 0))
+
+                for game in games:
+                    if game.get('home_points') is None or game.get('away_points') is None:
+                        continue
+
+                    home_team = game['home_team']
+                    away_team = game['away_team']
+                    home_score = int(game['home_points'])
+                    away_score = int(game['away_points'])
+
+                    if home_team not in elo_ratings: elo_ratings[home_team] = 1500.0
+                    if away_team not in elo_ratings: elo_ratings[away_team] = 1500.0
+
+                    r_home = elo_ratings[home_team] + HOME_ADVANTAGE
+                    r_away = elo_ratings[away_team]
+
+                    exp_home = 1 / (1 + 10 ** ((r_away - r_home) / 400))
+                    actual_home = 1.0 if home_score > away_score else (0.5 if home_score == away_score else 0.0)
+
+                    margin = abs(home_score - away_score)
+                    mov_multiplier = np.log(margin + 1) * (2.2 / ((r_home - r_away) * 0.001 + 2.2)) if margin > 0 else 1.0
+
+                    shift = K_FACTOR * mov_multiplier * (actual_home - exp_home)
+                    elo_ratings[home_team] += shift
+                    elo_ratings[away_team] -= shift
+        except Exception as e:
+            st.warning(f"Error compiling history for {year}: {e}")
+
+    return elo_ratings
 
 def get_closest_elo(team_name, elo_dict):
     """Helper function to map mismatched team names from different APIs."""
@@ -32,8 +77,6 @@ def generate_score_projection(home_team, away_team, elo_dict):
     BASE_AVG_SCORE = 28.0
     POINTS_PER_ELO = 25.0
 
-    # FIXED: Using the fuzzy mapping function instead of direct .get()
-
     r_home = get_closest_elo(home_team, elo_dict) + HOME_ADVANTAGE_ELO
     r_away = get_closest_elo(away_team, elo_dict)
 
@@ -43,6 +86,7 @@ def generate_score_projection(home_team, away_team, elo_dict):
 
     win_prob = 1 / (1 + 10 ** ((r_away - r_home) / 400))
     return proj_home, proj_away, win_prob
+
 # =====================================================================
 # 3. LIVE MARKET SYNCHRONIZATION PIPELINE
 # =====================================================================
@@ -52,7 +96,7 @@ def fetch_live_market_spreads(api_key):
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
 
     for key in sport_keys:
-        url = f"https://api.the-odds-api.com/v4/sports/{key}/odds/"
+        url = f"https://the-odds-api.com{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
             response = requests.get(url, params=params)
@@ -129,13 +173,12 @@ st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
 st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
 
 if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
-    st.error("ģ Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
+    st.error("🔑 Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
 else:
     status_box = st.info("Step 1: Running Elo calculations across thousands of historical D1 matches...")
     trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
 
-    status_box.info(
-"Step 2: Connecting to sportsbooks to collect live games and spreads...")
+    status_box.info("Step 2: Connecting to sportsbooks to collect live games and spreads...")
     live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
 
     status_box.empty()
@@ -144,7 +187,7 @@ else:
         df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
 
         if not df_slate.empty:
-            search_query = st.text_input("ģ Search for a team:", "").lower()
+            search_query = st.text_input("🔍 Search for a team:", "").lower()
             if search_query:
                 df_slate = df_slate[
                     df_slate["Home Program"].str.lower().str.contains(search_query) |
@@ -152,6 +195,6 @@ else:
                 ]
             st.dataframe(df_slate, use_container_width=True, hide_index=True)
         else:
-            st.warning("ģ  Connected successfully, but no games with active point spread markets are open right now.")
+            st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now.")
     else:
-        st.error("ģ Failed to download any upcoming odds. Check the error notifications above for structural details.")
+        st.error("❌ Failed to download any upcoming odds. Check the error notifications above for structural details.")
