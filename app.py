@@ -82,24 +82,29 @@ def generate_score_projection(home_team, away_team, elo_dict):
 # =====================================================================
 @st.cache_data(ttl=3600)
 def fetch_live_market_spreads(api_key):
-    """Pulls betting spreads safely with connection timeouts to prevent network locks."""
+    """Pulls betting spreads safely by masking the script as a regular web browser."""
     combined_games = []
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
     
+    # ✅ FIX: This header makes the API request look like a normal human using Google Chrome
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    
     for key in sport_keys:
         url = f"https://the-odds-api.com{key}/odds/"
-        # Added a 10-second connection timeout window
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
-            response = requests.get(url, params=params, timeout=10)
+            # Added headers and a 15-second timeout window
+            response = requests.get(url, params=params, headers=headers, timeout=15)
             if response.status_code == 200:
                 combined_games.extend(response.json())
+            elif response.status_code == 401:
+                st.error(f"❌ The Odds API Error: Your API key is invalid or unauthorized.")
             else:
                 st.error(f"The Odds API Error ({key}): Code {response.status_code}")
-        except requests.exceptions.ConnectionError:
-            st.error(f"⚠️ Network block detected on {key}. Your firewall, VPN, or router is blocking the connection to the server.")
-        except Exception as e:
-            pass
+        except requests.exceptions.RequestException as e:
+            st.error(f"⚠️ Connection dropped. If you are using a VPN, please disconnect it, or try switching from Wi-Fi to a mobile hotspot.")
     return combined_games
 
 # =====================================================================
