@@ -2,7 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-import difflab
+import difflib
 
 # =====================================================================
 # 1. API CONFIGURATION
