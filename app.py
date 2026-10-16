@@ -22,8 +22,8 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Hardcoded explicitly to ensure the loop executes without syntax issues
-    for year in [2023, 2024, 2025, 2026]:
+    # FIXED: The explicit list of years is now completely restored
+    for year in:
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
@@ -58,7 +58,7 @@ def train_cfb_elo_model(api_key):
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
             else:
-                st.sidebar.error(f"CFBD API error for {year}: {response.status_code}")
+                st.sidebar.error(f"CFBD API error for {year}: Status {response.status_code}")
         except Exception as e:
             st.sidebar.warning(f"Error compiling history for {year}: {e}")
 
@@ -90,7 +90,6 @@ def generate_score_projection(home_team, away_team, elo_dict):
 
     win_prob = 1 / (1 + 10 ** ((r_away - r_home) / 400))
     return proj_home, proj_away, win_prob
-
 
 # =====================================================================
 # 3. LIVE MARKET SYNCHRONIZATION PIPELINE
