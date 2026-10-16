@@ -40,7 +40,7 @@ def train_keyless_elo_model():
                 actual_home = 1.0 if home_score > away_score else (0.5 if home_score == away_score else 0.0)
                 
                 
-except margin = abs(home_score - away_score)
+'except' margin = abs(home_score - away_score)
                 mov_multiplier = np.log(margin + 1) * (2.2 / ((r_home - r_away) * 0.001 + 2.2)) if margin > 0 else 1.0
                 
                 shift = K_FACTOR * mov_multiplier * (actual_home - exp_home)
