@@ -130,15 +130,15 @@ def compile_betting_slate(games, elo_dict):
         edge = market_spread - model_home_margin
 
         if edge > 3.5:
-            lean = f"ģ {home_team} ({market_spread}) Strong Play"
+            lean = f"🔥 {home_team} ({market_spread}) Strong Play"
         elif edge > 1.5:
-            lean = f"ģ {home_team} ({market_spread}) Slight Lean"
+            lean = f"👌 {home_team} ({market_spread}) Slight Lean"
         elif edge < -3.5:
-            lean = f"ģ {away_team} (+{abs(market_spread)}) Strong Play"
+            lean = f"🔥 {away_team} (+{abs(market_spread)}) Strong Play"
         elif edge < -1.5:
-            lean = f"ģ {away_team} (+{abs(market_spread)}) Slight Lean"
+            lean = f"👌 {away_team} (+{abs(market_spread)}) Slight Lean"
         else:
-            lean = "ģ Pass / No Value"
+            lean = "➡️ Pass / No Value"
 
         processed_slate.append({
             "Home Program": home_team,
