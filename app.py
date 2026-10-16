@@ -202,3 +202,19 @@ else:
         st.sidebar.markdown(f"**Score Prediction:**  \n`{sim_away} {s_away:.1f}` vs. `{sim_home} {s_home:.1f}`")
         st.sidebar.markdown(f"**Algorithmic Implied Spread:**  \n`{sim_home} {model_spread:+.1f}`")
         st.sidebar.markdown("---")
+
+   # =================================================================
+    # SECTION 2: MAIN SLATE VISUAL MATRIX BOARD
+    # =================================================================
+    st.markdown("## 📅 Section 2: All D1 Matches vs. Point Spread Board")
+    
+    if live_odds_feed:
+        df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
+        
+        if not df_slate.empty:
+            search_query = st.text_input("🔍 Filter the board by team name (e.g. Clemson, Texas):", "").lower()
+            if search_query:
+                df_slate = df_slate[
+                    df_slate["Home Program"].str.lower().str.contains(search_query) | 
+                    df_slate["Away Program"].str.lower().str.contains(search_query)
+                ]
