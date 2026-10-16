@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
+import difflib
 
 # =====================================================================
 # 1. API CONFIGURATION
@@ -59,20 +60,35 @@ def train_cfb_elo_model(api_key):
 
     return elo_ratings
 
+def get_closest_elo(team_name, elo_dict):
+    """Maps commercial betting team names to official CFB data names."""
+    if team_name in elo_dict:
+        return elo_dict[team_name]
+    
+    # Fuzzy match using a 40% similarity threshold to bridge mascot differences
+    closest_matches = difflib.get_close_matches(team_name, list(elo_dict.keys()), n=1, cutoff=0.4)
+    if closest_matches:
+        return elo_dict[closest_matches[0]]
+        
+    return 1500.0  # Default baseline fallback if no match is found
+
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
     BASE_AVG_SCORE = 28.0
     POINTS_PER_ELO = 25.0
 
-    r_home = elo_dict.get(home_team, 1500.0) + HOME_ADVANTAGE_ELO
-    r_away = elo_dict.get(away_team, 1500.0)
+    # Uses the mapping helper to extract unique team Elo ratings
+    r_home = get_closest_elo(home_team, elo_dict) + HOME_ADVANTAGE_ELO
+    r_away = get_closest_elo(away_team, elo_dict)
 
     projected_margin = (r_home - r_away) / POINTS_PER_ELO
     proj_home = max(0, BASE_AVG_SCORE + (projected_margin / 2))
-    proj_away = max(0, BASE_AVG_SCORE - (projected_margin / 2))
+    proj_away = max(0, BASE_AVG_SCORE - (projected_margin / 
+2))
 
     win_prob = 1 / (1 + 10 ** ((r_away - r_home) / 400))
     return proj_home, proj_away, win_prob
+
 
 # =====================================================================
 # 3. LIVE MARKET SYNCHRONIZATION PIPELINE
