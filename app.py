@@ -150,8 +150,7 @@ def compile_betting_slate(games, elo_dict):
             "Calculated Algorithmic Lean": lean
         })
         
-    
-return pd.DataFrame(processed_slate)
+    return pd.DataFrame(processed_slate)
 
 # =====================================================================
 # 5. STREAMLIT VISUAL FRONTEND UI
