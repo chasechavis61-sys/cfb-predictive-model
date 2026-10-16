@@ -22,8 +22,8 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Replaced 'for year in:' with a valid iterable range of years
-    for year in range(2020, 2027):
+    # FIXED: Using a range function to pull 2023, 2024, 2025, and 2026 securely
+    for year in range(2023, 2027):
         url = f"https://collegefootballdata.com{year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
@@ -58,7 +58,8 @@ def train_cfb_elo_model(api_key):
                     elo_ratings[home_team] += shift
                     elo_ratings[away_team] -= shift
             else:
-                st.sidebar.error(f"CFBD API error for {year}: Status {response.status_code}")
+                st.sidebar.error(
+f"CFBD API error for {year}: Status {response.status_code}")
         except Exception as e:
             st.sidebar.warning(f"Error compiling history for {year}: {e}")
 
