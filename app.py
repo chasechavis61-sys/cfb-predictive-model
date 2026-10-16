@@ -111,42 +111,43 @@ def fetch_live_market_spreads(api_key):
     return combined_games
 
 # =====================================================================
-# 4. EDGE MATRIX COMPILATION ENGINE (WITH DIAGNOSTICS)
+# 4. EDGE MATRIX COMPILATION ENGINE (FIXED EXTRACTION)
 # =====================================================================
 def compile_betting_slate(games, elo_dict):
     processed_slate = []
 
-    # --- DIAGNOSTIC CORNER ---
-    st.write(f"📊 **Debug Info:** Your Elo database has **{len(elo_dict)}** teams stored.")
-    if len(elo_dict) > 0:
-        st.write(f"Sample teams in database: {list(elo_dict.keys())[:5]}")
-    else:
-        st.error("❌ CRITICAL: Your Elo database is completely empty! The historical API calls are failing.")
-    # --------------------------
-
     for game in games:
-        home_team = game["home_team"]
-        away_team = game["away_team"]
+        home_team = game.get("home_team")
+        away_team = game.get("away_team")
 
         market_spread = None
         bookmaker_used = "Consensus"
 
-        # Safe extraction for Odds API structure
-        if game.get("bookmakers") and len(game["bookmakers"]) > 0:
-            primary_book = game["bookmakers"][0]
+        # FIXED: Corrected deep list parsing for The Odds API structure
+        bookmakers = game.get("bookmakers", [])
+        if bookmakers and len(bookmakers) > 0:
+            primary_book = bookmakers[0]
             bookmaker_used = primary_book.get("title", "Unknown")
 
             markets = primary_book.get("markets", [])
             if markets and len(markets) > 0:
-                outcomes = markets[0].get("outcomes", [])
+                # Target the spreads market safely
+                spread_market = next((m for m in markets if m.get("key") == "spreads"), markets[0])
+                outcomes = spread_market.get("outcomes", [])
+                
                 for outcome in outcomes:
-                    if outcome["name"] == home_team:
-                        market_spread = float(outcome["point"])
+                    # We match the spread relative to the home team
+                    if outcome.get("name") == home_team:
+                        market_spread = float(outcome.get("point", 0))
 
+        # If no active spread exists, use a default 0 spread to ensure the game still processes
         if market_spread is None:
-            continue
+            market_spread = 0.0
+            bookmaker_used = "No Live Spread"
 
         proj_home, proj_away, home_prob = generate_score_projection(home_team, away_team, elo_dict)
+        
+        # Determine the projected winner based on unique scores
         winner = home_team if proj_home > proj_away else away_team
         win_percentage = home_prob if proj_home > proj_away else (1 - home_prob)
 
