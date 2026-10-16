@@ -203,17 +203,10 @@ else:
         st.sidebar.markdown(f"**Algorithmic Implied Spread:**  \n`{sim_home} {model_spread:+.1f}`")
         st.sidebar.markdown("---")
 
- import streamlit as st
+import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-
-# =====================================================================
-# 1. API CONFIGURATION
-# =====================================================================
-# 🛑 PASTE YOUR ACTIVE API KEYS HERE:
-THE_ODDS_API_KEY = "YOUR_THE_ODDS_API_KEY_HERE"
-CFBD_API_KEY = "YOUR_CFBD_API_KEY_HERE"
 
 # =====================================================================
 # 2. THE EMBEDDED ELO PREDICTIVE MODEL ENGINE
