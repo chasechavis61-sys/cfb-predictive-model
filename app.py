@@ -2,11 +2,11 @@ import streamlit as st
 import requests
 import pandas as pd
 import numpy as np
-import difflib
 
 # =====================================================================
 # 1. API CONFIGURATION
 # =====================================================================
+#  PASTE YOUR ACTIVE API KEYS HERE:
 THE_ODDS_API_KEY = "875f2f3bcab472c2046d7efb6659a7c3"
 CFBD_API_KEY = "Lx5SW7fjPsgpYp84gv245NpLzpUAW3ZuJVttG785YZKkqI3wDqgWUpqCqnY0YxXN"
 
@@ -21,8 +21,8 @@ def train_cfb_elo_model(api_key):
 
     headers = {"Authorization": f"Bearer {api_key}"}
 
-    # FIXED: Replaced empty 'in:' loop with a valid range of years and corrected indentation below
-    for year in range(2020, 2027):
+    # FIXED: Added the specific years to train historical team ratings
+    for year in [2023, 2024, 2025]:
         url = f"https://api.collegefootballdata.com/games?year={year}&seasonType=regular"
         try:
             response = requests.get(url, headers=headers)
@@ -59,25 +59,13 @@ def train_cfb_elo_model(api_key):
 
     return elo_ratings
 
-def get_closest_elo(team_name, elo_dict):
-    """Helper function to map mismatched team names from different APIs."""
-    if team_name in elo_dict:
-        return elo_dict[team_name]
-
-    # Find closest match in the Elo database if exact match fails
-    closest_matches = difflib.get_close_matches(team_name, elo_dict.keys(), n=1, cutoff=0.4)
-    if closest_matches:
-        return elo_dict[closest_matches[0]]
-
-    return 1500.0  # Fallback if absolutely no match is found
-
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
     BASE_AVG_SCORE = 28.0
     POINTS_PER_ELO = 25.0
 
-    r_home = get_closest_elo(home_team, elo_dict) + HOME_ADVANTAGE_ELO
-    r_away = get_closest_elo(away_team, elo_dict)
+    r_home = elo_dict.get(home_team, 1500.0) + HOME_ADVANTAGE_ELO
+    r_away = elo_dict.get(away_team, 1500.0)
 
     projected_margin = (r_home - r_away) / POINTS_PER_ELO
     proj_home = max(0, BASE_AVG_SCORE + (projected_margin / 2))
@@ -95,7 +83,7 @@ def fetch_live_market_spreads(api_key):
     sport_keys = ["americanfootball_ncaaf", "americanfootball_ncaaf_fcs"]
 
     for key in sport_keys:
-        url = f"https://the-odds-api.com{key}/odds/"
+        url = f"https://api.the-odds-api.com/v4/sports/{key}/odds/"
         params = {"apiKey": api_key, "regions": "us", "markets": "spreads", "oddsFormat": "american"}
         try:
             response = requests.get(url, params=params)
@@ -172,12 +160,13 @@ st.title("🏈 Ultimate All-D1 CFB Algorithmic Betting Matrix")
 st.markdown("Automated edge mapping syncing custom historical data against live odds feeds.")
 
 if THE_ODDS_API_KEY == "YOUR_THE_ODDS_API_KEY_HERE" or CFBD_API_KEY == "YOUR_CFBD_API_KEY_HERE":
-    st.error("🔑 Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
+    st.error("ģ Key Insertion Required: Update lines 10 & 11 inside the app.py script file.")
 else:
     status_box = st.info("Step 1: Running Elo calculations across thousands of historical D1 matches...")
     trained_elo_database = train_cfb_elo_model(CFBD_API_KEY)
 
-    status_box.info("Step 2: Connecting to sportsbooks to collect live games and spreads...")
+    status_box.info(
+"Step 2: Connecting to sportsbooks to collect live games and spreads...")
     live_odds_feed = fetch_live_market_spreads(THE_ODDS_API_KEY)
 
     status_box.empty()
@@ -186,7 +175,7 @@ else:
         df_slate = compile_betting_slate(live_odds_feed, trained_elo_database)
 
         if not df_slate.empty:
-            search_query = st.text_input("🔍 Search for a team:", "").lower()
+            search_query = st.text_input("ģ Search for a team:", "").lower()
             if search_query:
                 df_slate = df_slate[
                     df_slate["Home Program"].str.lower().str.contains(search_query) |
@@ -194,6 +183,6 @@ else:
                 ]
             st.dataframe(df_slate, use_container_width=True, hide_index=True)
         else:
-            st.warning("⚠️ Connected successfully, but no games with active point spread markets are open right now.")
+            st.warning("ģ  Connected successfully, but no games with active point spread markets are open right now.")
     else:
-        st.error("❌ Failed to download any upcoming odds. Check the error notifications above for structural details.")
+        st.error("ģ Failed to download any upcoming odds. Check the error notifications above for structural details.")
