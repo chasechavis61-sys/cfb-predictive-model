@@ -64,15 +64,28 @@ f"CFBD API error for {year}: Status {response.status_code}")
 
 def get_closest_elo(team_name, elo_dict):
     """Maps mismatched team names from betting feeds to historical tracking data."""
-    if team_name in elo_dict:
-        return elo_dict[team_name]
-
-    # Fuzzy match using a 40% similarity threshold to bridge mascot differences
-    closest_matches = difflib.get_close_matches(team_name, list(elo_dict.keys()), n=1, cutoff=0.4)
+    if not team_name:
+        return 1500.0
+        
+    # Standardize string formatting
+    team_clean = str(team_name).strip()
+    
+    if team_clean in elo_dict:
+        return elo_dict[team_clean]
+    
+    # Try exact match ignoring case
+    for k, v in elo_dict.items():
+        if k.lower() == team_clean.lower():
+            return v
+            
+    # Fallback to pure fuzzy matching using a soft 30% cutoff to bridge mascot gaps
+    closest_matches = difflib.get_close_matches(team_clean, list(elo_dict.keys()), n=1, cutoff=0.3)
     if closest_matches:
-        return elo_dict[closest_matches[0]]
-
-    return 1500.0  # Fallback
+        matched_team = closest_matches[0] # Grab the actual string item from the match list
+        return elo_dict[matched_team]
+        
+    
+return 1500.0  # Fallback baseline if absolutely no match is found 
 
 def generate_score_projection(home_team, away_team, elo_dict):
     HOME_ADVANTAGE_ELO = 55
