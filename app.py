@@ -213,3 +213,28 @@ else:
             st.warning("ģ  Connected successfully, but no games with active point spread markets are open right now.")
     else:
         st.error("ģ Failed to download any upcoming odds. Check the error notifications above for structural details.")
+
+# --- Load Elo teams ---
+elo_df = pd.read_sql_query("SELECT * FROM elo_teams", conn)
+
+# --- Auto-create missing Elo rows ---
+if elo_df.empty or len(elo_df) < len(teams_df):
+    st.warning("Elo teams missing — auto‑creating Elo rows...")
+
+    # Find teams without Elo rows
+    missing = teams_df[~teams_df["id"].isin(elo_df["team_id"])]
+
+    for _, row in missing.iterrows():
+        conn.execute(
+            "INSERT OR IGNORE INTO elo_teams (team_id, elo) VALUES (?, ?)",
+            (row["id"], 1500)
+        )
+
+    conn.commit()
+    st.success(f"Added {len(missing)} missing Elo team rows.")
+
+# --- Reload Elo table after fixing ---
+elo_df = pd.read_sql_query("SELECT * FROM elo_teams", conn)
+
+st.header("✅ Current Elo Teams")
+st.dataframe(elo_df)
