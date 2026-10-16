@@ -197,6 +197,3 @@ if processed_slate:
     st.dataframe(df_slate, use_container_width=True, hide_index=True)
 else:
     st.warning("⚠️ Connected to live repository data streams, but the upcoming week's schedule slate is finalizing. Check back shortly.")
-    st.dataframe(df_slate, use_container_width=True, hide_index=True)
-else:
-    st.warning("Gathering active weekly slate metrics from open channels...")
