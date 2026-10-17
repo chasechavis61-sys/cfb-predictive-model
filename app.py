@@ -56,23 +56,36 @@ def get_team_stats_dict(year=2024):
 
 # Predictive Model utilizing real seasonal stats
 def predict_game_outcome(home_team, away_team, team_stats, default_avg=28.0):
-    # Default statistics fallback if team is not found in CFBD
-    home_offense = team_stats.get(home_team, {}).get("totalYards", 400.0)
-    away_offense = team_stats.get(away_team, {}).get("totalYards", 400.0)
+    # Extract games played to calculate per-game stats (fallback to 12 if not found)
+    home_games = team_stats.get(home_team, {}).get("games", 12)
+    away_games = team_stats.get(away_team, {}).get("games", 12)
+    if home_games == 0: home_games = 12
+    if away_games == 0: away_games = 12
 
-    # We can use points-based indicators or yardages to build an index.
-    # Let's derive a simple Power Index using yards gained as a proxy for offensive/defensive capability
-    # Average CFB team gains ~400 yards/game and scores ~28 points (~1 point per 14.3 yards)
-    home_pred_score = (home_offense / 14.3)
-    away_pred_score = (away_offense / 14.3)
+    # Get raw season totals
+    home_total_pts = team_stats.get(home_team, {}).get("points", default_avg * home_games)
+    away_total_pts = team_stats.get(away_team, {}).get("points", default_avg * away_games)
+    home_total_pts_allowed = team_stats.get(home_team, {}).get("pointsAllowed", default_avg * home_games)
+    away_total_pts_allowed = team_stats.get(away_team, {}).get("pointsAllowed", default_avg * away_games)
 
-    # Add a standard home field advantage (typically +3 points in CFB)
-    home_pred_score += 1.5
-    away_pred_score -= 1.5
+    # Calculate per game averages
+    home_off_ppg = home_total_pts / home_games
+    home_def_ppg = home_total_pts_allowed / home_games
+    away_off_ppg = away_total_pts / away_games
+    away_def_ppg = away_total_pts_allowed / away_games
+
+    # Project score using Offensive performance vs Opponent Defense relative to CFB baseline average
+    # Simple Formula: (Team Offense PPG * Opponent Defense PPG) / National Average (approx. 28.0 PPG)
+    home_pred_score = (home_off_ppg * away_def_ppg) / default_avg
+    away_pred_score = (away_off_ppg * home_def_ppg) / default_avg
+
+    # Add a standard home field advantage (+2.5 points in CFB)
+    home_pred_score += 1.25
+    away_pred_score -= 1.25
 
     # Clamp values to realistic scores
-    home_pred_score = max(10.0, round(home_pred_score, 1))
-    away_pred_score = max(10.0, round(away_pred_score, 1))
+    home_pred_score = max(7.0, round(home_pred_score, 1))
+    away_pred_score = max(7.0, round(away_pred_score, 1))
 
     return home_pred_score, away_pred_score
 
