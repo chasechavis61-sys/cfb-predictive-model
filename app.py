@@ -15,7 +15,7 @@ if not CFBD_API_KEY or not ODDS_API_KEY:
     st.warning("⚠️ Please configure both CFBD_API_KEY and ODDS_API_KEY in your Streamlit secrets.")
 
 # Helper function to query CFBD API
-@st.cache_data(ttl=3600)
+@st.cache_data(ttl=600)  # Reduced TTL so updates apply faster
 def get_cfbd_data(endpoint, params={}):
     headers = {"Authorization": f"Bearer {CFBD_API_KEY}"}
     url = f"https://api.collegefootballdata.com{endpoint}"
@@ -25,7 +25,7 @@ def get_cfbd_data(endpoint, params={}):
     return []
 
 # Helper function to query The Odds API
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=300)
 def get_odds_data(sport="americanfootball_ncaaf", regions="us", markets="spreads,totals"):
     url = f"https://api.the-odds-api.com/v4/sports/{sport}/odds/"
     params = {
@@ -40,7 +40,7 @@ def get_odds_data(sport="americanfootball_ncaaf", regions="us", markets="spreads
     return []
 
 # Fetch Team Records and Stats from CFBD to power the model
-@st.cache_data(ttl=86400)
+@st.cache_data(ttl=1800)  # Reduced TTL to ensure old bad metrics aren't frozen in cache
 def get_team_stats_dict(year=2024):
     # Fetch team seasonal stats from CFBD
     stats_data = get_cfbd_data("/stats/season", {"year": year})
@@ -54,36 +54,33 @@ def get_team_stats_dict(year=2024):
         teams_dict[team][stat_name] = stat_val
     return teams_dict
 
+# Helper to calculate and retrieve a team's per-game stats
+def get_team_averages(team, team_stats, default_avg=28.0):
+    stats_entry = team_stats.get(team, {})
+    games = stats_entry.get("games", 12)
+    if games == 0: 
+        games = 12
+
+    total_pts = stats_entry.get("points", default_avg * games)
+    total_pts_allowed = stats_entry.get("pointsAllowed", default_avg * games)
+
+    off_ppg = total_pts / games
+    def_ppg = total_pts_allowed / games
+    return off_ppg, def_ppg
+
 # Predictive Model utilizing real seasonal stats
 def predict_game_outcome(home_team, away_team, team_stats, default_avg=28.0):
-    # Extract games played to calculate per-game stats (fallback to 12 if not found)
-    home_games = team_stats.get(home_team, {}).get("games", 12)
-    away_games = team_stats.get(away_team, {}).get("games", 12)
-    if home_games == 0: home_games = 12
-    if away_games == 0: away_games = 12
-
-    # Get raw season totals
-    home_total_pts = team_stats.get(home_team, {}).get("points", default_avg * home_games)
-    away_total_pts = team_stats.get(away_team, {}).get("points", default_avg * away_games)
-    home_total_pts_allowed = team_stats.get(home_team, {}).get("pointsAllowed", default_avg * home_games)
-    away_total_pts_allowed = team_stats.get(away_team, {}).get("pointsAllowed", default_avg * away_games)
-
-    # Calculate per game averages
-    home_off_ppg = home_total_pts / home_games
-    home_def_ppg = home_total_pts_allowed / home_games
-    away_off_ppg = away_total_pts / away_games
-    away_def_ppg = away_total_pts_allowed / away_games
+    home_off, home_def = get_team_averages(home_team, team_stats, default_avg)
+    away_off, away_def = get_team_averages(away_team, team_stats, default_avg)
 
     # Project score using Offensive performance vs Opponent Defense relative to CFB baseline average
-    # Simple Formula: (Team Offense PPG * Opponent Defense PPG) / National Average (approx. 28.0 PPG)
-    home_pred_score = (home_off_ppg * away_def_ppg) / default_avg
-    away_pred_score = (away_off_ppg * home_def_ppg) / default_avg
+    home_pred_score = (home_off * away_def) / default_avg
+    away_pred_score = (away_off * home_def) / default_avg
 
-    # Add a standard home field advantage (+2.5 points in CFB)
-    home_pred_score += 1.25
-    away_pred_score -= 1.25
+    # Add standard home field advantage (+1.5 points)
+    home_pred_score += 1.5
+    away_pred_score -= 1.5
 
-    # Clamp values to realistic scores
     home_pred_score = max(7.0, round(home_pred_score, 1))
     away_pred_score = max(7.0, round(away_pred_score, 1))
 
@@ -91,16 +88,12 @@ def predict_game_outcome(home_team, away_team, team_stats, default_avg=28.0):
 
 # Helper to calculate probability and confidence level
 def calculate_bet_confidence(model_projected, market_line, is_total=False):
-    # Spreads have a lower standard deviation (~13.5) compared to Totals (~18.5) due to high variability
     std_dev = 18.5 if is_total else 13.5
-
     edge = abs(model_projected - market_line)
     prob = stats.norm.cdf(edge / std_dev) if edge > 0 else 0.5
 
-    # Realistically scale probabilities around typical sports betting outcomes
-    # Spreads get scaled slightly differently than Totals
     if is_total:
-        final_prob = 0.5 + (prob - 0.5) * 0.4  # more conservative scaling for totals
+        final_prob = 0.5 + (prob - 0.5) * 0.4  # Conservative scaling for totals
     else:
         final_prob = 0.5 + (prob - 0.5) * 0.5
 
@@ -123,17 +116,23 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
             if not odds_json:
                 st.error("Failed to retrieve odds data.")
             else:
-                compiled_picks = []
+                spread_picks = []
+                totals_picks = []
+                
                 for game in odds_json:
                     home_team = game.get("home_team")
                     away_team = game.get("away_team")
 
                     # Generate prediction dynamically
                     pred_home, pred_away = predict_game_outcome(home_team, away_team, team_stats)
-                    pred_spread = pred_away - pred_home # negative means home is favored
+                    pred_spread = pred_away - pred_home
                     pred_total = pred_home + pred_away
 
-                    # Extract bookmaker line (using first available bookmaker)
+                    # Retrieve team stats for transparent displaying
+                    home_off_ppg, home_def_ppg = get_team_averages(home_team, team_stats)
+                    away_off_ppg, away_def_ppg = get_team_averages(away_team, team_stats)
+
+                    # Extract bookmaker lines
                     bookmakers = game.get("bookmakers", [])
                     market_spread = None
                     market_total = None
@@ -151,50 +150,56 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                                 if outcomes:
                                     market_total = outcomes[0]["point"]
 
-                    # Evaluate Picks
-                    spread_pick = "No value"
-                    spread_prob_str = "N/A"
-                    spread_confidence = "🔴 Hold Off"
-
-                    total_pick = "No value"
-                    total_prob_str = "N/A"
-                    total_confidence = "🔴 Hold Off"
-
+                    # 1. Evaluate Spread Play
                     if market_spread is not None:
-                        prob, confidence = calculate_bet_confidence(pred_spread, market_spread, is_total=False)
-                        spread_prob_str = f"{prob * 100:.1f}%"
-                        spread_confidence = confidence
-
+                        prob_spread, conf_spread = calculate_bet_confidence(pred_spread, market_spread, is_total=False)
                         if pred_spread < market_spread:
                             spread_pick = f"{home_team} {market_spread}"
                         else:
                             opp_spread = +market_spread if market_spread < 0 else -market_spread
                             spread_pick = f"{away_team} {opp_spread}"
+                        
+                        spread_picks.append({
+                            "Game": f"{away_team} @ {home_team}",
+                            "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
+                            "Market Spread": market_spread,
+                            "Best Spread Pick": spread_pick,
+                            "Spread Prob": f"{prob_spread * 100:.1f}%",
+                            "Spread Tier": conf_spread
+                        })
 
+                    # 2. Evaluate Totals Play
                     if market_total is not None:
-                        prob, confidence = calculate_bet_confidence(pred_total, market_total, is_total=True)
-                        total_prob_str = f"{prob * 100:.1f}%"
-                        total_confidence = confidence
-
+                        prob_total, conf_total = calculate_bet_confidence(pred_total, market_total, is_total=True)
                         if pred_total > market_total:
                             total_pick = f"Over {market_total}"
                         else:
                             total_pick = f"Under {market_total}"
+                        
+                        totals_picks.append({
+                            "Game": f"{away_team} @ {home_team}",
+                            "Away Off PPG / Def PPG": f"{away_off_ppg:.1f} / {away_def_ppg:.1f}",
+                            "Home Off PPG / Def PPG": f"{home_off_ppg:.1f} / {home_def_ppg:.1f}",
+                            "Model Projected Total": f"{pred_total:.1f}",
+                            "Market Total": market_total,
+                            "Best Totals Pick": total_pick,
+                            "Totals Prob": f"{prob_total * 100:.1f}%",
+                            "Totals Tier": conf_total
+                        })
 
-                    compiled_picks.append({
-                        "Game": f"{away_team} @ {home_team}",
-                        "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
-                        "Market Spread": market_spread,
-                        "Best Spread Pick": spread_pick,
-                        "Spread Prob": spread_prob_str,
-                        "Spread Tier": spread_confidence,
-                        "Market Total": market_total,
-                        "Best Totals Pick": total_pick,
-                        "Totals Prob": total_prob_str,
-                        "Totals Tier": total_confidence
-                    })
+                # Render UI Tables
+                st.subheader("📊 Model Picks Against the Spread")
+                if spread_picks:
+                    st.dataframe(pd.DataFrame(spread_picks), use_container_width=True)
+                else:
+                    st.info("No active market spreads found.")
 
-                df_picks = pd.DataFrame(compiled_picks)
-                st.dataframe(df_picks, use_container_width=True)
+                st.write("---")
+
+                st.subheader("🔮 Model Picks Against the Total (Over / Under)")
+                if totals_picks:
+                    st.dataframe(pd.DataFrame(totals_picks), use_container_width=True)
+                else:
+                    st.info("No active market totals found.")
     else:
         st.error("Please enter valid API keys.")
