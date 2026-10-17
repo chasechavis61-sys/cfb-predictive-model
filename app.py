@@ -301,16 +301,26 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                     # 1. Evaluate Spread Play
                     if market_spread is not None:
                         prob_spread, conf_spread = calculate_bet_confidence(pred_spread, market_spread, is_total=False)
+                        
+                        # Format spreads correctly according to favorite/underdog convention
+                        # e.g., if market_spread is -42.5 for Home (Favorite), Away Underdog is +42.5
                         if pred_spread < market_spread:
-                            spread_pick = f"{home_team} {market_spread}"
+                            # Pick is Home Team
+                            formatted_spread = f"{market_spread:+.1f}" if market_spread != 0 else "PK"
+                            spread_pick = f"{home_team} {formatted_spread}"
                         else:
-                            opp_spread = +market_spread if market_spread < 0 else -market_spread
-                            spread_pick = f"{away_team} {opp_spread}"
+                            # Pick is Away Team
+                            opp_spread = -market_spread
+                            formatted_spread = f"{opp_spread:+.1f}" if opp_spread != 0 else "PK"
+                            spread_pick = f"{away_team} {formatted_spread}"
+
+                        # Display market spread with proper sign format for Home Team reference
+                        formatted_market_spread = f"{market_spread:+.1f}" if market_spread != 0 else "PK"
 
                         spread_picks.append({
                             "Game": f"{away_team} @ {home_team}",
                             "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
-                            "Market Spread": market_spread,
+                            "Market Spread": formatted_market_spread,
                             "Best Spread Pick": spread_pick,
                             "Spread Prob": f"{prob_spread * 100:.1f}%",
                             "Spread Tier": conf_spread
