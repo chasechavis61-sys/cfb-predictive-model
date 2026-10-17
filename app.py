@@ -56,6 +56,26 @@ def get_team_stats_dict(year=2024):
         teams_dict[team][stat_name] = stat_val
     return teams_dict
 
+# Compute dynamic FBS average PPG from the team stats dictionary
+def calculate_fbs_baseline_average(team_stats, default_value=28.0):
+    total_ppg_sum = 0.0
+    team_count = 0
+    for team, stats_entry in team_stats.items():
+        try:
+            games = float(stats_entry.get("games", 12))
+            if games <= 0:
+                games = 12.0
+            points = float(stats_entry.get("points", 0))
+            if points > 0:
+                total_ppg_sum += (points / games)
+                team_count += 1
+        except (ValueError, TypeError):
+            continue
+    
+    if team_count > 0:
+        return total_ppg_sum / team_count
+    return default_value
+
 # Standardize team names to fix API mismatches
 def clean_team_name(name):
     if not name:
@@ -94,7 +114,7 @@ def get_team_averages(team_name, team_stats, default_avg=28.0):
         return default_avg, default_avg
 
     stats_entry = team_stats.get(matched_name, {})
-    
+
     # Parse games, points, and pointsAllowed safely with numeric conversion
     try:
         games = float(stats_entry.get("games", 12))
@@ -117,18 +137,18 @@ def get_team_averages(team_name, team_stats, default_avg=28.0):
     def_ppg = total_pts_allowed / games
     return off_ppg, def_ppg
 
-# Predictive Model utilizing real seasonal stats
-def predict_game_outcome(home_team, away_team, team_stats, default_avg=28.0):
-    home_off, home_def = get_team_averages(home_team, team_stats, default_avg)
-    away_off, away_def = get_team_averages(away_team, team_stats, default_avg)
+# Predictive Model utilizing real seasonal stats and dynamic baseline average
+def predict_game_outcome(home_team, away_team, team_stats, baseline_avg=28.0):
+    home_off, home_def = get_team_averages(home_team, team_stats, baseline_avg)
+    away_off, away_def = get_team_averages(away_team, team_stats, baseline_avg)
 
     # Project score using Offensive performance vs Opponent Defense relative to CFB baseline average
-    home_pred_score = (home_off * away_def) / default_avg
-    away_pred_score = (away_off * home_def) / default_avg
+    home_pred_score = (home_off * away_def) / baseline_avg
+    away_pred_score = (away_off * home_def) / baseline_avg
 
-    # Add standard home field advantage (+1.5 points)
-    home_pred_score += 1.5
-    away_pred_score -= 1.5
+    # Add standard home field advantage (+2.5 points)
+    home_pred_score += 2.5
+    away_pred_score -= 2.5
 
     home_pred_score = max(7.0, round(home_pred_score, 1))
     away_pred_score = max(7.0, round(away_pred_score, 1))
@@ -165,6 +185,10 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
             if not odds_json:
                 st.error("Failed to retrieve odds data.")
             else:
+                # Dynamically calculate baseline average based on fetched data
+                baseline_avg = calculate_fbs_baseline_average(team_stats)
+                st.sidebar.metric(label="Dynamic CFB Baseline PPG", value=f"{baseline_avg:.2f}")
+                
                 spread_picks = []
                 totals_picks = []
 
@@ -173,13 +197,13 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                     away_team = game.get("away_team")
 
                     # Generate prediction dynamically
-                    pred_home, pred_away = predict_game_outcome(home_team, away_team, team_stats)
+                    pred_home, pred_away = predict_game_outcome(home_team, away_team, team_stats, baseline_avg)
                     pred_spread = pred_away - pred_home
                     pred_total = pred_home + pred_away
 
                     # Retrieve team stats for transparent displaying
-                    home_off_ppg, home_def_ppg = get_team_averages(home_team, team_stats)
-                    away_off_ppg, away_def_ppg = get_team_averages(away_team, team_stats)
+                    home_off_ppg, home_def_ppg = get_team_averages(home_team, team_stats, baseline_avg)
+                    away_off_ppg, away_def_ppg = get_team_averages(away_team, team_stats, baseline_avg)
 
                     # Extract bookmaker lines
                     bookmakers = game.get("bookmakers", [])
@@ -252,4 +276,3 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                     st.info("No active market totals found.")
     else:
         st.error("Please enter valid API keys.")
-
