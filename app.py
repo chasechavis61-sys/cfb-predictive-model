@@ -59,39 +59,45 @@ def predict_game_outcome(home_team, away_team, team_stats, default_avg=28.0):
     # Default statistics fallback if team is not found in CFBD
     home_offense = team_stats.get(home_team, {}).get("totalYards", 400.0)
     away_offense = team_stats.get(away_team, {}).get("totalYards", 400.0)
-    
+
     # We can use points-based indicators or yardages to build an index.
     # Let's derive a simple Power Index using yards gained as a proxy for offensive/defensive capability
     # Average CFB team gains ~400 yards/game and scores ~28 points (~1 point per 14.3 yards)
     home_pred_score = (home_offense / 14.3)
     away_pred_score = (away_offense / 14.3)
-    
+
     # Add a standard home field advantage (typically +3 points in CFB)
     home_pred_score += 1.5
     away_pred_score -= 1.5
-    
+
     # Clamp values to realistic scores
     home_pred_score = max(10.0, round(home_pred_score, 1))
     away_pred_score = max(10.0, round(away_pred_score, 1))
-    
+
     return home_pred_score, away_pred_score
 
 # Helper to calculate probability and confidence level
 def calculate_bet_confidence(model_projected, market_line, is_total=False):
-    std_dev = 13.5
+    # Spreads have a lower standard deviation (~13.5) compared to Totals (~18.5) due to high variability
+    std_dev = 18.5 if is_total else 13.5
+    
     edge = abs(model_projected - market_line)
     prob = stats.norm.cdf(edge / std_dev) if edge > 0 else 0.5
-    
+
     # Realistically scale probabilities around typical sports betting outcomes
-    final_prob = 0.5 + (prob - 0.5) * 0.5
-    
+    # Spreads get scaled slightly differently than Totals
+    if is_total:
+        final_prob = 0.5 + (prob - 0.5) * 0.4  # more conservative scaling for totals
+    else:
+        final_prob = 0.5 + (prob - 0.5) * 0.5
+
     if final_prob >= 0.55:
         confidence = "🟢 Strong Play"
     elif final_prob >= 0.515:
         confidence = "🟡 Slight Lean"
     else:
         confidence = "🔴 Hold Off"
-        
+
     return final_prob, confidence
 
 # Fetch and Process Data
@@ -136,7 +142,7 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                     spread_pick = "No value"
                     spread_prob_str = "N/A"
                     spread_confidence = "🔴 Hold Off"
-                    
+
                     total_pick = "No value"
                     total_prob_str = "N/A"
                     total_confidence = "🔴 Hold Off"
@@ -158,24 +164,4 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                         total_confidence = confidence
 
                         if pred_total > market_total:
-                            total_pick = f"Over {market_total}"
-                        else:
-                            total_pick = f"Under {market_total}"
-
-                    compiled_picks.append({
-                        "Game": f"{away_team} @ {home_team}",
-                        "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
-                        "Market Spread": market_spread,
-                        "Best Spread Pick": spread_pick,
-                        "Spread Prob": spread_prob_str,
-                        "Spread Tier": spread_confidence,
-                        "Market Total": market_total,
-                        "Best Totals Pick": total_pick,
-                        "Totals Prob": total_prob_str,
-                        "Totals Tier": total_confidence
-                    })
-
-                df_picks = pd.DataFrame(compiled_picks)
-                st.dataframe(df_picks, use_container_width=True)
-    else:
-        st.error("Please enter valid API keys.")
+                            total_pick = f
