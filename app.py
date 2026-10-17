@@ -125,7 +125,7 @@ def find_matching_team(target_name, team_stats):
         # Exact match check after cleaning
         if real_cleaned == target_cleaned:
             return real_name
-        
+
         # Intersection scoring
         real_tokens = set(real_cleaned.split())
         if target_tokens and real_tokens:
@@ -258,9 +258,9 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                     pred_spread = pred_away - pred_home
                     pred_total = pred_home + pred_away
 
-                    # Retrieve team stats for transparent displaying
-                    home_off_ppg, home_def_ppg, _, _ = get_team_averages(home_team, team_stats, baseline_off, baseline_def)
-                    away_off_ppg, away_def_ppg, _, _ = get_team_averages(away_team, team_stats, baseline_off, baseline_def)
+                    # Retrieve team stats for transparent displaying - passing baseline parameters to avoid default fallbacks
+                    home_off_ppg, home_def_ppg, _, _ = get_team_averages(home_team, team_stats, baseline_off, baseline_def, baseline_oyg)
+                    away_off_ppg, away_def_ppg, _, _ = get_team_averages(away_team, team_stats, baseline_off, baseline_def, baseline_oyg)
 
                     # Extract bookmaker lines
                     bookmakers = game.get("bookmakers", [])
