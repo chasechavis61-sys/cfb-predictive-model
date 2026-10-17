@@ -42,12 +42,15 @@ def get_odds_data(sport="americanfootball_ncaaf", regions="us", markets="spreads
 # Fetch Team Records and Stats from CFBD to power the model
 @st.cache_data(ttl=1800)
 def get_team_stats_dict(year=2024):
+    # Fetch team seasonal stats from CFBD
     stats_data = get_cfbd_data("/stats/season", {"year": year})
     teams_dict = {}
     for entry in stats_data:
         team = entry.get("team")
         stat_name = entry.get("statName")
         stat_val = entry.get("statValue")
+        if not team:
+            continue
         if team not in teams_dict:
             teams_dict[team] = {}
         teams_dict[team][stat_name] = stat_val
@@ -71,11 +74,11 @@ def find_matching_team(target_name, team_stats):
     target_cleaned = clean_team_name(target_name)
     if not target_cleaned:
         return None
-    
+
     # Direct check
     if target_name in team_stats:
         return target_name
-        
+
     # Fuzzy match using cleaned keys
     for real_name in team_stats.keys():
         if clean_team_name(real_name) == target_cleaned:
@@ -89,14 +92,26 @@ def get_team_averages(team_name, team_stats, default_avg=28.0):
     matched_name = find_matching_team(team_name, team_stats)
     if not matched_name:
         return default_avg, default_avg
-        
-    stats_entry = team_stats.get(matched_name, {})
-    games = stats_entry.get("games", 12)
-    if games == 0: 
-        games = 12
 
-    total_pts = stats_entry.get("points", default_avg * games)
-    total_pts_allowed = stats_entry.get("pointsAllowed", default_avg * games)
+    stats_entry = team_stats.get(matched_name, {})
+    
+    # Parse games, points, and pointsAllowed safely with numeric conversion
+    try:
+        games = float(stats_entry.get("games", 12))
+    except (ValueError, TypeError):
+        games = 12.0
+    if games <= 0:
+        games = 12.0
+
+    try:
+        total_pts = float(stats_entry.get("points", default_avg * games))
+    except (ValueError, TypeError):
+        total_pts = default_avg * games
+
+    try:
+        total_pts_allowed = float(stats_entry.get("pointsAllowed", default_avg * games))
+    except (ValueError, TypeError):
+        total_pts_allowed = default_avg * games
 
     off_ppg = total_pts / games
     def_ppg = total_pts_allowed / games
@@ -143,7 +158,7 @@ def calculate_bet_confidence(model_projected, market_line, is_total=False):
 # Fetch and Process Data
 if st.sidebar.button("Fetch Latest Games & Predict"):
     if CFBD_API_KEY and ODDS_API_KEY:
-        with st.spinner("Fetching team stats, market lines, and generating predictions..."):
+        with st.spinner("Fetching team stats, market lines, and generating predictions... "):
             odds_json = get_odds_data()
             team_stats = get_team_stats_dict()
 
@@ -152,7 +167,7 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
             else:
                 spread_picks = []
                 totals_picks = []
-                
+
                 for game in odds_json:
                     home_team = game.get("home_team")
                     away_team = game.get("away_team")
@@ -192,7 +207,7 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                         else:
                             opp_spread = +market_spread if market_spread < 0 else -market_spread
                             spread_pick = f"{away_team} {opp_spread}"
-                        
+
                         spread_picks.append({
                             "Game": f"{away_team} @ {home_team}",
                             "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
@@ -209,7 +224,7 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                             total_pick = f"Over {market_total}"
                         else:
                             total_pick = f"Under {market_total}"
-                        
+
                         totals_picks.append({
                             "Game": f"{away_team} @ {home_team}",
                             "Away Off PPG / Def PPG": f"{away_off_ppg:.1f} / {away_def_ppg:.1f}",
@@ -217,7 +232,7 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                             "Model Projected Total": f"{pred_total:.1f}",
                             "Market Total": market_total,
                             "Best Totals Pick": total_pick,
-                            "Totals Prob": f"{prob_total * 100:.1f}%",
+                            "Totals Prob": f"{(prob_total * 100):.1f}%",
                             "Totals Tier": conf_total
                         })
 
@@ -237,3 +252,4 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                     st.info("No active market totals found.")
     else:
         st.error("Please enter valid API keys.")
+
