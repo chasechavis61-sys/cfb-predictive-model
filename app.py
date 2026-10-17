@@ -15,7 +15,7 @@ if not CFBD_API_KEY or not ODDS_API_KEY:
     st.warning("⚠️ Please configure both CFBD_API_KEY and ODDS_API_KEY in your Streamlit secrets.")
 
 # Helper function to query CFBD API
-@st.cache_data(ttl=600)  # Reduced TTL so updates apply faster
+@st.cache_data(ttl=600)
 def get_cfbd_data(endpoint, params={}):
     headers = {"Authorization": f"Bearer {CFBD_API_KEY}"}
     url = f"https://api.collegefootballdata.com{endpoint}"
@@ -40,9 +40,8 @@ def get_odds_data(sport="americanfootball_ncaaf", regions="us", markets="spreads
     return []
 
 # Fetch Team Records and Stats from CFBD to power the model
-@st.cache_data(ttl=1800)  # Reduced TTL to ensure old bad metrics aren't frozen in cache
+@st.cache_data(ttl=1800)
 def get_team_stats_dict(year=2024):
-    # Fetch team seasonal stats from CFBD
     stats_data = get_cfbd_data("/stats/season", {"year": year})
     teams_dict = {}
     for entry in stats_data:
@@ -54,9 +53,44 @@ def get_team_stats_dict(year=2024):
         teams_dict[team][stat_name] = stat_val
     return teams_dict
 
+# Standardize team names to fix API mismatches
+def clean_team_name(name):
+    if not name:
+        return ""
+    # Common suffixes or words to discard for matching purposes
+    removals = ["buckeyes", "tigers", "longhorns", "crimson", "tide", "aggies", "gators",
+                "seminoles", "wolverines", "badgers", "bruins", "trojans", "sooner",
+                "sooners", "railriders", "state", "st", "univ", "university", "&", "and"]
+    cleaned = name.lower()
+    for r in removals:
+        cleaned = cleaned.replace(f" {r}", " ").replace(f"{r} ", " ")
+    return "".join(c for c in cleaned if c.isalnum()).strip()
+
+# Find the best matching team key from our stats dataset
+def find_matching_team(target_name, team_stats):
+    target_cleaned = clean_team_name(target_name)
+    if not target_cleaned:
+        return None
+    
+    # Direct check
+    if target_name in team_stats:
+        return target_name
+        
+    # Fuzzy match using cleaned keys
+    for real_name in team_stats.keys():
+        if clean_team_name(real_name) == target_cleaned:
+            return real_name
+        if target_cleaned in clean_team_name(real_name) or clean_team_name(real_name) in target_cleaned:
+            return real_name
+    return None
+
 # Helper to calculate and retrieve a team's per-game stats
-def get_team_averages(team, team_stats, default_avg=28.0):
-    stats_entry = team_stats.get(team, {})
+def get_team_averages(team_name, team_stats, default_avg=28.0):
+    matched_name = find_matching_team(team_name, team_stats)
+    if not matched_name:
+        return default_avg, default_avg
+        
+    stats_entry = team_stats.get(matched_name, {})
     games = stats_entry.get("games", 12)
     if games == 0: 
         games = 12
@@ -93,7 +127,7 @@ def calculate_bet_confidence(model_projected, market_line, is_total=False):
     prob = stats.norm.cdf(edge / std_dev) if edge > 0 else 0.5
 
     if is_total:
-        final_prob = 0.5 + (prob - 0.5) * 0.4  # Conservative scaling for totals
+        final_prob = 0.5 + (prob - 0.5) * 0.4
     else:
         final_prob = 0.5 + (prob - 0.5) * 0.5
 
