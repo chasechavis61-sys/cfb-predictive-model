@@ -80,7 +80,7 @@ def predict_game_outcome(home_team, away_team, team_stats, default_avg=28.0):
 def calculate_bet_confidence(model_projected, market_line, is_total=False):
     # Spreads have a lower standard deviation (~13.5) compared to Totals (~18.5) due to high variability
     std_dev = 18.5 if is_total else 13.5
-    
+
     edge = abs(model_projected - market_line)
     prob = stats.norm.cdf(edge / std_dev) if edge > 0 else 0.5
 
@@ -164,4 +164,24 @@ if st.sidebar.button("Fetch Latest Games & Predict"):
                         total_confidence = confidence
 
                         if pred_total > market_total:
-                            total_pick = f
+                            total_pick = f"Over {market_total}"
+                        else:
+                            total_pick = f"Under {market_total}"
+
+                    compiled_picks.append({
+                        "Game": f"{away_team} @ {home_team}",
+                        "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
+                        "Market Spread": market_spread,
+                        "Best Spread Pick": spread_pick,
+                        "Spread Prob": spread_prob_str,
+                        "Spread Tier": spread_confidence,
+                        "Market Total": market_total,
+                        "Best Totals Pick": total_pick,
+                        "Totals Prob": total_prob_str,
+                        "Totals Tier": total_confidence
+                    })
+
+                df_picks = pd.DataFrame(compiled_picks)
+                st.dataframe(df_picks, use_container_width=True)
+    else:
+        st.error("Please enter valid API keys.")
