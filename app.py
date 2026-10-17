@@ -177,7 +177,7 @@ def get_team_averages(team_name, team_stats, baseline_off, baseline_def, baselin
     def_ppg = float(stats_entry.get("pointsAllowed", baseline_def * games)) / games
     off_ypg = float(stats_entry.get("totalYards", baseline_oyg * games)) / games
     def_ypg = float(stats_entry.get("opponentYards", baseline_oyg * games)) / games
-    
+
     # Calibrating plays: raw play trackers can be inflated by special teams snap-tracking.
     # Standard CFB teams run ~68-75 offensive plays/game. We apply a normalization multiplier of 1.35
     # to play counts if they are unrealistically low, ensuring standard true YPP range matches real world.
@@ -209,7 +209,7 @@ def compute_advanced_factors(home_team, away_team, games_logs, team_stats, basel
     # 1. Recent Form & Recency weighting
     # We calculate the last 4 games vs full season margin to add a momentum adjustment
     completed_games = [g for g in games_logs if g.get("home_points") is not None and g.get("away_points") is not None]
-    
+
     def get_team_momentum(team_name):
         team_games = []
         for g in completed_games:
@@ -220,7 +220,7 @@ def compute_advanced_factors(home_team, away_team, games_logs, team_stats, basel
                 week = g.get("week", 1)
                 margin = (g["home_points"] - g["away_points"]) if is_home else (g["away_points"] - g["home_points"])
                 team_games.append((week, margin))
-        
+
         if not team_games:
             return 0.0
         team_games = sorted(team_games, key=lambda x: x[0], reverse=True)
@@ -263,7 +263,7 @@ def compute_advanced_factors(home_team, away_team, games_logs, team_stats, basel
 # Advanced Prediction Model using PPG, YPP multipliers, SOS, Recency & Rest
 def predict_game_outcome_advanced(home_team, away_team, team_stats, games_logs, baseline_vals):
     base_off, base_def, base_oyg, base_dyg, base_oplays, base_dplays = baseline_vals
-    
+
     # Fetch team stats and YPP
     home_off, home_def, home_oyg, home_dyg, home_oypp, home_dypp = get_team_averages(home_team, team_stats, base_off, base_def, base_oyg, base_oplays)
     away_off, away_def, away_oyg, away_dyg, away_oypp, away_dypp = get_team_averages(away_team, team_stats, base_off, base_def, base_oyg, base_oplays)
@@ -276,7 +276,7 @@ def predict_game_outcome_advanced(home_team, away_team, team_stats, games_logs, 
     base_ypp = base_oyg / base_oplays
     home_ypp_mult = (home_oypp / max(0.5, away_dypp)) / 1.0
     away_ypp_mult = (away_oypp / max(0.5, home_dypp)) / 1.0
-    
+
     home_ypp_mult = np.clip(home_ypp_mult, 0.85, 1.15)
     away_ypp_mult = np.clip(away_ypp_mult, 0.85, 1.15)
 
@@ -305,7 +305,10 @@ def calculate_bet_confidence(model_projected, market_line, is_total=False):
     else:
         final_prob = 0.5 + (prob - 0.5) * 0.55
 
-    if final_prob >= 0.54:
+    # Custom confidence tiers specified by the user
+    if final_prob >= 0.75:
+        confidence = "🔥 Best Play"
+    elif final_prob >= 0.60:
         confidence = "🟢 Strong Play"
     elif final_prob >= 0.512:
         confidence = "🟡 Slight Lean"
