@@ -53,7 +53,6 @@ def get_odds_data(sport="americanfootball_ncaaf", regions="us", markets="spreads
 # Fetch Team Records and Stats from CFBD to power the model
 @st.cache_data(ttl=1800)
 def get_team_stats_dict(year=2024):
-    # Fetch team seasonal stats from CFBD
     stats_data = get_cfbd_data("/stats/season", {"year": year})
     if not stats_data:
         st.sidebar.warning("⚠️ No seasonal stats retrieved from CFBD API. Using fallback model baselines.")
@@ -96,11 +95,9 @@ def find_matching_team(target_name, team_stats):
 
     for real_name in team_stats.keys():
         real_cleaned = clean_team_name(real_name)
-        # Exact match check after cleaning
         if real_cleaned == target_cleaned:
             return real_name
 
-        # Intersection scoring
         real_tokens = set(real_cleaned.split())
         if target_tokens and real_tokens:
             intersection = target_tokens.intersection(real_tokens)
@@ -111,7 +108,7 @@ def find_matching_team(target_name, team_stats):
 
     return best_match if best_score > 0.4 else None
 
-# Calculate dynamic FBS average stats from the team stats dictionary including plays/YPP
+# Calculate dynamic FBS average stats from the team stats dictionary
 def calculate_fbs_baseline_averages(team_stats, default_off=28.3, default_def=28.3):
     total_off_sum = 0.0
     total_def_sum = 0.0
@@ -156,7 +153,7 @@ def calculate_fbs_baseline_averages(team_stats, default_off=28.3, default_def=28
         )
     return default_off, default_def, 401.5, 398.2, 72.0, 71.5
 
-# Helper to calculate and retrieve a team's per-game stats incorporating YPP (Yards Per Play)
+# Helper to calculate and retrieve a team's per-game stats
 def get_team_averages(team_name, team_stats, baseline_off, baseline_def, baseline_oyg, baseline_oplays):
     matched_name = find_matching_team(team_name, team_stats)
     if not matched_name:
@@ -178,15 +175,11 @@ def get_team_averages(team_name, team_stats, baseline_off, baseline_def, baselin
     off_ypg = float(stats_entry.get("totalYards", baseline_oyg * games)) / games
     def_ypg = float(stats_entry.get("opponentYards", baseline_oyg * games)) / games
 
-    # Calibrating plays: raw play trackers can be inflated by special teams snap-tracking.
-    # Standard CFB teams run ~68-75 offensive plays/game. We apply a normalization multiplier of 1.35
-    # to play counts if they are unrealistically low, ensuring standard true YPP range matches real world.
     off_plays = float(stats_entry.get("offensePlays", baseline_oplays * games)) / games
     def_plays = float(stats_entry.get("defensePlays", baseline_oplays * games)) / games
 
     if off_plays > 0:
         off_ypp = off_ypg / off_plays
-        # Standard calibration to align with official NCAA stats (e.g. Clemson ~4.68 rather than 6.2+)
         off_ypp = off_ypp * 0.745
     else:
         off_ypp = 5.5
@@ -199,231 +192,7 @@ def get_team_averages(team_name, team_stats, baseline_off, baseline_def, baselin
 
     return off_ppg, def_ppg, off_ypg, def_ypg, off_ypp, def_ypp
 
-# Fetch game logs for Weighted Recency & Situational Rest Calculations
+# Fetch game logs
 @st.cache_data(ttl=1800)
 def fetch_recent_game_logs(year=2024):
-    return get_cfbd_data("/games", {"year": year})
-
-# Calculate Weighted Recency, SOS adjustments, and Rest Factors
-def compute_advanced_factors(home_team, away_team, games_logs, team_stats, baseline_off, baseline_def):
-    # 1. Recent Form & Recency weighting
-    # We calculate the last 4 games vs full season margin to add a momentum adjustment
-    completed_games = [g for g in games_logs if g.get("home_points") is not None and g.get("away_points") is not None]
-
-    def get_team_momentum(team_name):
-        team_games = []
-        for g in completed_games:
-            is_home = find_matching_team(g["home_team"], team_stats) == find_matching_team(team_name, team_stats)
-            is_away = find_matching_team(g["away_team"], team_stats) == find_matching_team(team_name, team_stats)
-            if is_home or is_away:
-                # Record datetime or week
-                week = g.get("week", 1)
-                margin = (g["home_points"] - g["away_points"]) if is_home else (g["away_points"] - g["home_points"])
-                team_games.append((week, margin))
-
-        if not team_games:
-            return 0.0
-        team_games = sorted(team_games, key=lambda x: x[0], reverse=True)
-        # Exponential decay weights for last 4 games vs the rest
-        recent_margins = [m for _, m in team_games[:4]]
-        return np.mean(recent_margins) * 0.15 if recent_margins else 0.0
-
-    home_momentum = get_team_momentum(home_team)
-    away_momentum = get_team_momentum(away_team)
-
-    # 2. Situational Rest / Bye Week detection
-    def get_days_since_last_game(team_name):
-        team_dates = []
-        for g in completed_games:
-            is_home = find_matching_team(g["home_team"], team_stats) == find_matching_team(team_name, team_stats)
-            is_away = find_matching_team(g["away_team"], team_stats) == find_matching_team(team_name, team_stats)
-            if (is_home or is_away) and g.get("start_date"):
-                try:
-                    date_obj = datetime.strptime(g["start_date"].split("T")[0], "%-Y-%m-%d")
-                    team_dates.append(date_obj)
-                except Exception:
-                    continue
-        if not team_dates:
-            return 7 # Standard
-        team_dates = sorted(team_dates, reverse=True)
-        delta = (datetime.now() - team_dates[0]).days
-        return delta
-
-    home_rest_days = get_days_since_last_game(home_team)
-    away_rest_days = get_days_since_last_game(away_team)
-
-    rest_adjustment = 0.0
-    if home_rest_days >= 13: # Bye week
-        rest_adjustment += 1.5
-    if away_rest_days >= 13:
-        rest_adjustment -= 1.5
-
-    return home_momentum - away_momentum + rest_adjustment
-
-# Advanced Prediction Model using PPG, YPP multipliers, SOS, Recency & Rest
-def predict_game_outcome_advanced(home_team, away_team, team_stats, games_logs, baseline_vals):
-    base_off, base_def, base_oyg, base_dyg, base_oplays, base_dplays = baseline_vals
-
-    # Fetch team stats and YPP
-    home_off, home_def, home_oyg, home_dyg, home_oypp, home_dypp = get_team_averages(home_team, team_stats, base_off, base_def, base_oyg, base_oplays)
-    away_off, away_def, away_oyg, away_dyg, away_oypp, away_dypp = get_team_averages(away_team, team_stats, base_off, base_def, base_oyg, base_oplays)
-
-    # Base raw matchup scores
-    home_raw = (home_off * away_def) / ((base_off + base_def) / 2)
-    away_raw = (away_off * home_def) / ((base_off + base_def) / 2)
-
-    # Yard Per Play (YPP) Matchup Ratio Multiplier
-    base_ypp = base_oyg / base_oplays
-    home_ypp_mult = (home_oypp / max(0.5, away_dypp)) / 1.0
-    away_ypp_mult = (away_oypp / max(0.5, home_dypp)) / 1.0
-
-    home_ypp_mult = np.clip(home_ypp_mult, 0.85, 1.15)
-    away_ypp_mult = np.clip(away_ypp_mult, 0.85, 1.15)
-
-    home_pred = home_raw * home_ypp_mult
-    away_pred = away_raw * away_ypp_mult
-
-    # Apply home field advantage (+2.5)
-    home_pred += 2.5
-    away_pred -= 2.5
-
-    # Integrate momentum & rest
-    situational_offset = compute_advanced_factors(home_team, away_team, games_logs, team_stats, base_off, base_def)
-    home_pred += situational_offset / 2
-    away_pred -= situational_offset / 2
-
-    return max(7.0, round(home_pred, 1)), max(7.0, round(away_pred, 1))
-
-# Calibrated Betting confidence using realistic standard deviation for CFB markets
-def calculate_bet_confidence(model_projected, market_line, is_total=False):
-    std_dev = 19.0 if is_total else 14.0
-    edge = abs(model_projected - market_line)
-    prob = stats.norm.cdf(edge / std_dev) if edge > 0 else 0.5
-
-    if is_total:
-        final_prob = 0.5 + (prob - 0.5) * 0.45
-    else:
-        final_prob = 0.5 + (prob - 0.5) * 0.55
-
-    # Custom confidence tiers specified by the user
-    if final_prob >= 0.75:
-        confidence = "🔥 Best Play"
-    elif final_prob >= 0.60:
-        confidence = "🟢 Strong Play"
-    elif final_prob >= 0.512:
-        confidence = "🟡 Slight Lean"
-    else:
-        confidence = "🔴 Hold Off"
-
-    return final_prob, confidence
-
-# Fetch and Process Data
-if st.sidebar.button("Fetch Latest Games & Predict"):
-    if CFBD_API_KEY and ODDS_API_KEY:
-        with st.spinner("Fetching team stats, market lines, and generating predictions... "):
-            odds_json = get_odds_data()
-            team_stats = get_team_stats_dict()
-            games_logs = fetch_recent_game_logs()
-
-            if not odds_json:
-                st.error("Failed to retrieve odds data.")
-            else:
-                # Dynamically calculate baseline averages based on fetched data
-                baseline_vals = calculate_fbs_baseline_averages(team_stats)
-                st.sidebar.metric(label="Dynamic CFB Offense Baseline", value=f"{baseline_vals[0]:.2f} PPG")
-                st.sidebar.metric(label="Dynamic CFB Defense Baseline", value=f"{baseline_vals[1]:.2f} PPG")
-
-                spread_picks = []
-                totals_picks = []
-
-                for game in odds_json:
-                    home_team = game.get("home_team")
-                    away_team = game.get("away_team")
-
-                    # Generate prediction using our advanced predictive model
-                    pred_home, pred_away = predict_game_outcome_advanced(
-                        home_team, away_team, team_stats, games_logs, baseline_vals
-                    )
-                    pred_spread = pred_away - pred_home
-                    pred_total = pred_home + pred_away
-
-                    # Retrieve team stats for display
-                    home_off_ppg, home_def_ppg, _, _, home_ypp, _ = get_team_averages(home_team, team_stats, baseline_vals[0], baseline_vals[1], baseline_vals[2], baseline_vals[4])
-                    away_off_ppg, away_def_ppg, _, _, away_ypp, _ = get_team_averages(away_team, team_stats, baseline_vals[0], baseline_vals[1], baseline_vals[2], baseline_vals[4])
-
-                    # Extract bookmaker lines
-                    bookmakers = game.get("bookmakers", [])
-                    market_spread = None
-                    market_total = None
-
-                    if bookmakers:
-                        markets = bookmakers[0].get("markets", [])
-                        for market in markets:
-                            if market["key"] == "spreads":
-                                outcomes = market.get("outcomes", [])
-                                for outcome in outcomes:
-                                    if outcome["name"] == home_team:
-                                        market_spread = outcome["point"]
-                            elif market["key"] == "totals":
-                                outcomes = market.get("outcomes", [])
-                                if outcomes:
-                                    market_total = outcomes[0]["point"]
-
-                    # 1. Evaluate Spread Play
-                    if market_spread is not None:
-                        prob_spread, conf_spread = calculate_bet_confidence(pred_spread, market_spread, is_total=False)
-
-                        if pred_spread < market_spread:
-                            formatted_spread = f"{market_spread:+.1f}" if market_spread != 0 else "PK"
-                            spread_pick = f"{home_team} {formatted_spread}"
-                        else:
-                            opp_spread = -market_spread
-                            formatted_spread = f"{opp_spread:+.1f}" if opp_spread != 0 else "PK"
-                            spread_pick = f"{away_team} {formatted_spread}"
-
-                        formatted_market_spread = f"{market_spread:+.1f}" if market_spread != 0 else "PK"
-
-                        spread_picks.append({
-                            "Game": f"{away_team} @ {home_team}",
-                            "Model Pred (Away-Home)": f"{pred_away:.1f} - {pred_home:.1f}",
-                            "Market Spread": formatted_market_spread,
-                            "Best Spread Pick": spread_pick,
-                            "Spread Prob": f"{prob_spread * 100:.1f}%",
-                            "Spread Tier": conf_spread
-                        })
-
-                    # 2. Evaluate Totals Play
-                    if market_total is not None:
-                        prob_total, conf_total = calculate_bet_confidence(pred_total, market_total, is_total=True)
-                        if pred_total > market_total:
-                            total_pick = f"Over {market_total}"
-                        else:
-                            total_pick = f"Under {market_total}"
-
-                        totals_picks.append({
-                            "Game": f"{away_team} @ {home_team}",
-                            "Away Off PPG / YPP": f"{away_off_ppg:.1f} / {away_ypp:.2f}",
-                            "Home Off PPG / YPP": f"{home_off_ppg:.1f} / {home_ypp:.2f}",
-                            "Model Projected Total": f"{pred_total:.1f}",
-                            "Market Total": market_total,
-                            "Best Totals Pick": total_pick,
-                            "Totals Prob": f"{(prob_total * 100):.1f}%",
-                            "Totals Tier": conf_total
-                        })
-
-                # Render UI Tables
-                st.subheader("📊 Model Picks Against the Spread")
-                if spread_picks:
-                    st.dataframe(pd.DataFrame(spread_picks), use_container_width=True)
-                else:
-                    st.info("No active market spreads found.")
-
-                st.write("---")
-
-                st.subheader("🔮 Model Picks Against the Total (Over / Under)")
-                if totals_picks:
-                    st.dataframe(pd.DataFrame(totals_picks), use_container_width=True)
-                else:
-                    st.info("No active market totals found.")
-    else:
-        st.error("Please enter valid API keys.")
+    return get_cfbd_data("/games", {
